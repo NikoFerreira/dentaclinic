@@ -1,0 +1,84 @@
+---
+import '@fontsource-variable/inter';
+import '../styles/global.css';
+import { site } from '../data/site';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = `${site.name} — Odontología integral en Asunción`,
+  description = site.description,
+} = Astro.props;
+
+const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://dentaclinic.com.py').href;
+
+/** Datos estructurados para buscadores (schema.org/Dentist). */
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Dentist',
+  name: site.name,
+  description: site.description,
+  url: canonical,
+  telephone: site.phoneLabel,
+  email: site.email,
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: 'Av. Mariscal López 1234',
+    addressLocality: 'Asunción',
+    addressCountry: 'PY',
+  },
+  openingHoursSpecification: [
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      opens: '08:00',
+      closes: '20:00',
+    },
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: 'Saturday',
+      opens: '08:00',
+      closes: '13:00',
+    },
+  ],
+  availableService: ['Odontología general', 'Estética dental', 'Ortodoncia'],
+};
+---
+
+<!doctype html>
+<html lang="es" class="antialiased">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="theme-color" content="#0d7482" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_PY" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} is:inline />
+  </head>
+
+  <body>
+    <a
+      href="#contenido"
+      class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+    >
+      Saltar al contenido principal
+    </a>
+    <slot />
+  </body>
+</html>

@@ -1,0 +1,119 @@
+---
+import BrandIcon from './BrandIcon.astro';
+import Icon from './Icon.astro';
+import Logo from './Logo.astro';
+import { navLinks, schedule, site, socials } from '../data/site';
+
+const year = new Date().getFullYear();
+---
+
+<footer class="border-t border-ink-200/70 bg-white">
+  <div class="container-page py-14 sm:py-16">
+    <div class="grid gap-11 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
+      <div class="lg:col-span-1">
+        <Logo />
+        <p class="mt-5 max-w-xs text-sm leading-relaxed text-ink-500">
+          Consultorio odontológico con tecnología digital y atención humana en el corazón de
+          Asunción.
+        </p>
+        <ul class="mt-6 flex gap-2">
+          {
+            socials.map((social) => (
+              <li>
+                <a
+                  href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="grid h-10 w-10 place-items-center rounded-xl border border-ink-200 text-ink-500 transition-colors hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700"
+                >
+                  <span class="sr-only">{social.label}</span>
+                  <BrandIcon name={social.icon} class="h-[1.15rem] w-[1.15rem]" />
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+
+      <nav aria-labelledby="footer-nav-titulo">
+        <h2 id="footer-nav-titulo" class="text-sm font-semibold text-ink-900">Navegación</h2>
+        <ul class="mt-5 space-y-1">
+          {
+            navLinks.map((link) => (
+              <li>
+                <a
+                  href={link.href}
+                  class="inline-block py-1 text-sm text-ink-500 transition-colors hover:text-brand-700"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </nav>
+
+      <section aria-labelledby="footer-horarios-titulo">
+        <h2 id="footer-horarios-titulo" class="text-sm font-semibold text-ink-900">
+          Horarios de atención
+        </h2>
+        <dl class="mt-5 space-y-3 text-sm">
+          {
+            schedule.map((slot) => (
+              <div>
+                <dt class="text-ink-500">{slot.days}</dt>
+                <dd class="font-medium text-ink-900">{slot.hours}</dd>
+              </div>
+            ))
+          }
+        </dl>
+      </section>
+
+      <section aria-labelledby="footer-contacto-titulo">
+        <h2 id="footer-contacto-titulo" class="text-sm font-semibold text-ink-900">Contacto</h2>
+        <ul class="mt-5 space-y-1.5 text-sm">
+          <li>
+            <a
+              href={site.addressHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-start gap-2.5 py-1 text-ink-500 transition-colors hover:text-brand-700"
+            >
+              <Icon name="pin" class="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+              {site.address}
+            </a>
+          </li>
+          <li>
+            <a
+              href={site.phoneHref}
+              class="flex items-start gap-2.5 py-1 text-ink-500 transition-colors hover:text-brand-700"
+            >
+              <Icon name="phone" class="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+              {site.phoneLabel}
+            </a>
+          </li>
+          <li>
+            <a
+              href={`mailto:${site.email}`}
+              class="flex items-start gap-2.5 py-1 text-ink-500 transition-colors hover:text-brand-700"
+            >
+              <Icon name="mail" class="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+              {site.email}
+            </a>
+          </li>
+        </ul>
+      </section>
+    </div>
+
+    <div
+      class="mt-12 flex flex-col gap-4 border-t border-ink-200/70 pt-7 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p class="text-sm text-ink-500">
+        &copy; {year} {site.name}. Todos los derechos reservados.
+      </p>
+      <p class="text-sm text-ink-500">
+        Reg. Prof. MSP N.&deg; 12.345 <span class="text-ink-300">·</span> Asunción, Paraguay
+      </p>
+    </div>
+  </div>
+</footer>

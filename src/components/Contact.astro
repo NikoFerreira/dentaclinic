@@ -1,0 +1,241 @@
+---
+import Icon from './Icon.astro';
+import { site, specialties, schedule } from '../data/site';
+
+const fieldClass =
+  'w-full rounded-xl border border-ink-200 bg-white px-4 py-3 text-base text-ink-900 placeholder:text-ink-500 transition-colors hover:border-ink-300 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100';
+const labelClass = 'block text-sm font-medium text-ink-700';
+
+const details = [
+  { icon: 'pin', label: 'Dirección', value: site.address, href: site.addressHref },
+  { icon: 'phone', label: 'Teléfono', value: site.phoneLabel, href: site.phoneHref },
+  { icon: 'mail', label: 'Correo', value: site.email, href: `mailto:${site.email}` },
+] as const;
+---
+
+<section id="contacto" class="bg-white section-y" aria-labelledby="contacto-titulo">
+  <div class="container-page">
+    <div class="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-[0.14em] text-brand-600">Agenda</p>
+        <h2
+          id="contacto-titulo"
+          class="mt-3 text-3xl font-semibold tracking-tight text-ink-900 sm:text-4xl"
+        >
+          Reservá tu cita
+        </h2>
+        <p class="mt-4 text-lg leading-relaxed text-ink-500">
+          Completá el formulario y te confirmamos el horario por WhatsApp en menos de 24 horas
+          hábiles.
+        </p>
+
+        <ul class="mt-10 space-y-5">
+          {
+            details.map((item) => (
+              <li class="flex items-start gap-4">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                  <Icon name={item.icon} class="h-5 w-5" />
+                </span>
+                <div>
+                  <span class="block text-xs font-medium uppercase tracking-wider text-ink-500">
+                    {item.label}
+                  </span>
+                  <a
+                    href={item.href}
+                    class="inline-block py-1 text-base font-medium text-ink-900 transition-colors hover:text-brand-700"
+                    {...item.icon === 'pin' ? { target: '_blank', rel: 'noopener noreferrer' } : {}}
+                  >
+                    {item.value}
+                  </a>
+                </div>
+              </li>
+            ))
+          }
+        </ul>
+
+        <div class="mt-10 rounded-2xl border border-ink-200/80 bg-page p-6">
+          <h3 class="flex items-center gap-2 text-sm font-semibold text-ink-900">
+            <Icon name="clock" class="h-4 w-4 text-brand-600" />
+            Horarios de atención
+          </h3>
+          <dl class="mt-4 space-y-2.5 text-sm">
+            {
+              schedule.map((slot) => (
+                <div class="flex items-baseline justify-between gap-4">
+                  <dt class="text-ink-500">{slot.days}</dt>
+                  <dd class="font-medium text-ink-900">{slot.hours}</dd>
+                </div>
+              ))
+            }
+          </dl>
+        </div>
+      </div>
+
+      <div class="rounded-4xl border border-ink-200/80 bg-page p-7 sm:p-10">
+        <form id="cita-form" class="space-y-5" novalidate>
+          <div class="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label class={labelClass} for="nombre">Nombre completo</label>
+              <input
+                class={`mt-2 ${fieldClass}`}
+                id="nombre"
+                name="nombre"
+                type="text"
+                autocomplete="name"
+                placeholder="Ana Giménez"
+                required
+                minlength="2"
+              />
+            </div>
+            <div>
+              <label class={labelClass} for="telefono">Teléfono</label>
+              <input
+                class={`mt-2 ${fieldClass}`}
+                id="telefono"
+                name="telefono"
+                type="tel"
+                inputmode="tel"
+                autocomplete="tel"
+                placeholder="+595 981 000 000"
+                required
+                pattern="[0-9+()\s-]{7,}"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class={labelClass} for="correo">Correo electrónico</label>
+            <input
+              class={`mt-2 ${fieldClass}`}
+              id="correo"
+              name="correo"
+              type="email"
+              autocomplete="email"
+              placeholder="ana@correo.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label class={labelClass} for="especialidad">Especialidad</label>
+            <select class={`mt-2 ${fieldClass}`} id="especialidad" name="especialidad" required>
+              <option value="" selected disabled>Seleccioná una opción</option>
+              {specialties.map((specialty) => <option value={specialty}>{specialty}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label class={labelClass} for="mensaje">
+              Mensaje <span class="font-normal text-ink-500">(opcional)</span>
+            </label>
+            <textarea
+              class={`mt-2 resize-y ${fieldClass}`}
+              id="mensaje"
+              name="mensaje"
+              rows="3"
+              placeholder="Contanos brevemente tu motivo de consulta"></textarea>
+          </div>
+
+          <p id="cita-error" class="hidden text-sm font-medium text-red-700" role="alert"></p>
+
+          <button
+            type="submit"
+            class="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand-600 px-7 py-3.5 text-base font-semibold text-white shadow-lg shadow-brand-600/20 transition-colors hover:bg-brand-700"
+          >
+            <Icon name="calendar" class="h-4.5 w-4.5" />
+            Solicitar cita
+          </button>
+
+          <p class="text-center text-xs leading-relaxed text-ink-500">
+            Al enviar aceptás que te contactemos para coordinar la cita. No compartimos tus datos
+            con terceros.
+          </p>
+        </form>
+
+        <div
+          id="cita-exito"
+          class="hidden flex-col items-center py-10 text-center"
+          role="status"
+          tabindex="-1"
+        >
+          <span class="grid h-14 w-14 place-items-center rounded-full bg-mint-100 text-mint-600">
+            <Icon name="check" class="h-7 w-7" strokeWidth={2} />
+          </span>
+          <h3 class="mt-6 text-xl font-semibold tracking-tight text-ink-900">Solicitud enviada</h3>
+          <p class="mt-3 max-w-sm text-[0.975rem] leading-relaxed text-ink-500">
+            Gracias por escribirnos. Te confirmamos el horario por WhatsApp dentro de las próximas
+            24 horas hábiles.
+          </p>
+          <button
+            type="button"
+            id="cita-reset"
+            class="mt-7 inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white px-5 py-2.5 text-sm font-semibold text-ink-700 transition-colors hover:border-brand-200 hover:text-brand-700"
+          >
+            Enviar otra solicitud
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const form = document.getElementById('cita-form') as HTMLFormElement | null;
+  const success = document.getElementById('cita-exito');
+  const error = document.getElementById('cita-error');
+  const reset = document.getElementById('cita-reset');
+
+  const messages: Record<string, string> = {
+    nombre: 'Ingresá tu nombre completo.',
+    telefono: 'Ingresá un teléfono válido para contactarte.',
+    correo: 'Ingresá un correo electrónico válido.',
+    especialidad: 'Seleccioná la especialidad que necesitás.',
+  };
+
+  const showError = (field: HTMLInputElement | HTMLSelectElement) => {
+    if (!error) return;
+    error.textContent = messages[field.name] ?? 'Revisá los datos ingresados.';
+    error.classList.remove('hidden');
+    field.setAttribute('aria-invalid', 'true');
+    field.focus();
+  };
+
+  const clearError = () => {
+    error?.classList.add('hidden');
+    form?.querySelectorAll('[aria-invalid]').forEach((el) => el.removeAttribute('aria-invalid'));
+  };
+
+  form?.addEventListener('input', clearError);
+
+  form?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!form) return;
+
+    const invalid = Array.from(form.elements).find(
+      (el): el is HTMLInputElement | HTMLSelectElement =>
+        (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) && !el.checkValidity(),
+    );
+
+    if (invalid) {
+      showError(invalid);
+      return;
+    }
+
+    clearError();
+
+    // TODO: enviar los datos al endpoint real del consultorio (API, CRM o servicio de formularios).
+    // Ej.: await fetch('/api/citas', { method: 'POST', body: new FormData(form) })
+    form.classList.add('hidden');
+    success?.classList.remove('hidden');
+    success?.classList.add('flex');
+    (success as HTMLElement | null)?.focus();
+  });
+
+  reset?.addEventListener('click', () => {
+    form?.reset();
+    success?.classList.add('hidden');
+    success?.classList.remove('flex');
+    form?.classList.remove('hidden');
+    (form?.elements.namedItem('nombre') as HTMLInputElement | null)?.focus();
+  });
+</script>

@@ -1,0 +1,53 @@
+---
+import Icon from './Icon.astro';
+import { faqs, site } from '../data/site';
+---
+
+<section id="faq" class="section-y" aria-labelledby="faq-titulo">
+  <div class="container-page">
+    <div class="grid gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
+      <header class="lg:sticky lg:top-28 lg:self-start">
+        <p class="text-sm font-semibold uppercase tracking-[0.14em] text-brand-600">Preguntas frecuentes</p>
+        <h2
+          id="faq-titulo"
+          class="mt-3 text-3xl font-semibold tracking-tight text-ink-900 sm:text-4xl"
+        >
+          Lo que suelen consultarnos
+        </h2>
+        <p class="mt-4 text-lg leading-relaxed text-ink-500">
+          Si tu duda no está acá, escribinos por WhatsApp y te respondemos el mismo día.
+        </p>
+        <a
+          href={site.whatsappHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-6 inline-flex items-center gap-2 py-1 text-sm font-semibold text-brand-700 underline decoration-brand-200 decoration-2 underline-offset-4 transition-colors hover:decoration-brand-600"
+        >
+          Escribir por WhatsApp
+          <Icon name="arrowRight" class="h-4 w-4" />
+        </a>
+      </header>
+
+      <!-- <details> nativo: accesible por teclado y sin JS -->
+      <div class="divide-y divide-ink-200/80 overflow-hidden rounded-3xl border border-ink-200/80 bg-white">
+        {
+          faqs.map((faq) => (
+            <details class="group">
+              <summary
+                class="flex cursor-pointer items-center justify-between gap-5 px-6 py-5 text-left text-base font-semibold text-ink-900 transition-colors hover:text-brand-700 sm:px-8 sm:py-6"
+              >
+                <span>{faq.question}</span>
+                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-ink-200 text-ink-500 transition-all duration-200 group-open:rotate-180 group-open:border-brand-200 group-open:bg-brand-50 group-open:text-brand-700">
+                  <Icon name="chevron" class="h-4 w-4" />
+                </span>
+              </summary>
+              <div class="px-6 pb-6 sm:px-8 sm:pb-7">
+                <p class="max-w-2xl text-[0.975rem] leading-relaxed text-ink-500">{faq.answer}</p>
+              </div>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,114 @@
+---
+import Icon from './Icon.astro';
+import Logo from './Logo.astro';
+import { navLinks } from '../data/site';
+---
+
+<header class="sticky top-0 z-50 border-b border-ink-200/70 bg-white/85 backdrop-blur-md">
+  <nav class="container-page flex h-16 items-center justify-between md:h-18" aria-label="Navegación principal">
+    <a href="#inicio" class="shrink-0 rounded-lg" aria-label="DentaClinic, ir al inicio">
+      <Logo />
+    </a>
+
+    <ul class="hidden items-center gap-1 md:flex">
+      {
+        navLinks.map((link) => (
+          <li>
+            <a
+              href={link.href}
+              class="rounded-lg px-3.5 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-brand-50 hover:text-brand-700"
+            >
+              {link.label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+
+    <div class="flex items-center gap-2">
+      <a
+        href="#contacto"
+        class="hidden items-center gap-2 rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-brand-600/20 transition-colors hover:bg-brand-700 sm:inline-flex"
+      >
+        <Icon name="calendar" class="h-4 w-4" />
+        Agendar Cita
+      </a>
+
+      <button
+        type="button"
+        id="nav-toggle"
+        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-ink-200 text-ink-700 transition-colors hover:bg-ink-100 md:hidden"
+        aria-expanded="false"
+        aria-controls="nav-mobile"
+      >
+        <span class="sr-only">Abrir menú de navegación</span>
+        <Icon name="menu" class="h-5 w-5" id="nav-icon-open" />
+        <Icon name="close" class="hidden h-5 w-5" id="nav-icon-close" />
+      </button>
+    </div>
+  </nav>
+
+  <div id="nav-mobile" class="hidden border-t border-ink-200/70 bg-white md:hidden">
+    <ul class="container-page flex flex-col gap-1 py-4">
+      {
+        navLinks.map((link) => (
+          <li>
+            <a
+              href={link.href}
+              class="block rounded-lg px-3 py-2.5 text-base font-medium text-ink-700 transition-colors hover:bg-brand-50 hover:text-brand-700"
+            >
+              {link.label}
+            </a>
+          </li>
+        ))
+      }
+      <li class="pt-2">
+        <a
+          href="#contacto"
+          class="flex items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white"
+        >
+          <Icon name="calendar" class="h-4 w-4" />
+          Agendar Cita
+        </a>
+      </li>
+    </ul>
+  </div>
+</header>
+
+<script>
+  const toggle = document.getElementById('nav-toggle');
+  const panel = document.getElementById('nav-mobile');
+  const iconOpen = document.getElementById('nav-icon-open');
+  const iconClose = document.getElementById('nav-icon-close');
+  const label = toggle?.querySelector('span');
+
+  const setOpen = (open: boolean) => {
+    if (!toggle || !panel) return;
+    toggle.setAttribute('aria-expanded', String(open));
+    panel.classList.toggle('hidden', !open);
+    iconOpen?.classList.toggle('hidden', open);
+    iconClose?.classList.toggle('hidden', !open);
+    if (label) label.textContent = open ? 'Cerrar menú de navegación' : 'Abrir menú de navegación';
+  };
+
+  toggle?.addEventListener('click', () => {
+    setOpen(toggle.getAttribute('aria-expanded') !== 'true');
+  });
+
+  // Cierra el panel al elegir un destino o al presionar Escape
+  panel?.addEventListener('click', (event) => {
+    if ((event.target as HTMLElement).closest('a')) setOpen(false);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && toggle?.getAttribute('aria-expanded') === 'true') {
+      setOpen(false);
+      toggle.focus();
+    }
+  });
+
+  // Evita que el panel móvil quede abierto al pasar a escritorio
+  window.matchMedia('(min-width: 768px)').addEventListener('change', (event) => {
+    if (event.matches) setOpen(false);
+  });
+</script>

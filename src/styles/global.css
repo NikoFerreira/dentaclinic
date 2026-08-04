@@ -1,0 +1,118 @@
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------
+   Design tokens — paleta clinica minimalista
+   Azul clinico suave (brand) + verde menta relajante (mint)
+   sobre fondo blanco / gris muy claro, con texto de alto contraste.
+   ------------------------------------------------------------------ */
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Texto — todos los tonos 500+ superan AA sobre blanco */
+  --color-ink-900: #0a1b24;
+  --color-ink-700: #1d3440;
+  --color-ink-500: #55707e;
+  --color-ink-300: #9db0ba;
+  --color-ink-200: #dbe4e8;
+  --color-ink-100: #eef2f4;
+
+  /* Azul clinico */
+  --color-brand-50: #eef8f9;
+  --color-brand-100: #d7eff2;
+  --color-brand-200: #aee0e5;
+  --color-brand-300: #79cbd3;
+  --color-brand-400: #3fabb7;
+  --color-brand-500: #1d8b98;
+  --color-brand-600: #0d7482;
+  --color-brand-700: #0b5c68;
+
+  /* Verde menta */
+  --color-mint-50: #eefaf4;
+  --color-mint-100: #d9f4e7;
+  --color-mint-300: #8ee0bd;
+  --color-mint-600: #17936a;
+
+  /* Superficies */
+  --color-page: #f7fafb;
+
+  --radius-4xl: 2rem;
+}
+
+/* ------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------ */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-page);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Compensa el navbar sticky al navegar por anclas */
+  :target,
+  section[id] {
+    scroll-margin-top: 5.5rem;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 3px;
+    border-radius: 0.25rem;
+  }
+
+  ::selection {
+    background-color: var(--color-brand-100);
+    color: var(--color-brand-700);
+  }
+
+  /* El marcador nativo del acordeon se reemplaza por un icono propio */
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  summary {
+    list-style: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------
+   Utilidades de composicion reutilizadas en las secciones
+   ------------------------------------------------------------------ */
+@utility container-page {
+  width: 100%;
+  margin-inline: auto;
+  max-width: 76rem;
+  padding-inline: 1.25rem;
+
+  @media (width >= 40rem) {
+    padding-inline: 2rem;
+  }
+}
+
+@utility section-y {
+  padding-block: 4.5rem;
+
+  @media (width >= 48rem) {
+    padding-block: 7rem;
+  }
+}

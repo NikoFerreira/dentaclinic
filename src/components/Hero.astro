@@ -1,0 +1,116 @@
+---
+import Icon from './Icon.astro';
+import { site } from '../data/site';
+
+const highlights = [
+  { icon: 'shield', text: 'Protocolos de bioseguridad' },
+  { icon: 'cpu', text: 'Diagnóstico digital 3D' },
+  { icon: 'clock', text: 'Urgencias el mismo día' },
+] as const;
+---
+
+<section id="inicio" class="relative overflow-hidden bg-white">
+  <!-- Halos decorativos, sin peso semantico -->
+  <div class="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
+    <div class="absolute -right-32 -top-40 h-[32rem] w-[32rem] rounded-full bg-brand-50 blur-3xl"></div>
+    <div class="absolute -bottom-48 -left-24 h-96 w-96 rounded-full bg-mint-50 blur-3xl"></div>
+  </div>
+
+  <div class="container-page section-y">
+    <div class="grid items-center gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
+      <div class="max-w-2xl">
+        <p
+          class="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3.5 py-1.5 text-xs font-medium tracking-wide text-brand-700"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-mint-600" aria-hidden="true"></span>
+          Odontología integral en Asunción
+        </p>
+
+        <h1 class="mt-6 text-4xl font-semibold leading-[1.08] tracking-tight text-ink-900 sm:text-5xl lg:text-6xl">
+          Tu sonrisa en manos de expertos
+        </h1>
+
+        <p class="mt-6 text-lg leading-relaxed text-ink-500">
+          Diagnóstico preciso, tratamientos sin dolor y un plan claro desde la primera consulta.
+          Cuidamos tu salud dental con tecnología de última generación y un trato humano.
+        </p>
+
+        <div class="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <a
+            href="#contacto"
+            class="inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-7 py-3.5 text-base font-semibold text-white shadow-lg shadow-brand-600/20 transition-colors hover:bg-brand-700"
+          >
+            Agendar Cita
+            <Icon name="arrowRight" class="h-4 w-4" />
+          </a>
+          <a
+            href="#servicios"
+            class="inline-flex items-center justify-center gap-2 rounded-full border border-ink-200 bg-white px-7 py-3.5 text-base font-semibold text-ink-700 transition-colors hover:border-brand-200 hover:text-brand-700"
+          >
+            Ver servicios
+          </a>
+        </div>
+
+        <ul class="mt-10 flex flex-wrap gap-x-7 gap-y-3">
+          {
+            highlights.map((item) => (
+              <li class="inline-flex items-center gap-2 text-sm font-medium text-ink-700">
+                <Icon name={item.icon} class="h-4.5 w-4.5 text-brand-500" />
+                {item.text}
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+
+      <!-- Panel visual: composicion limpia, sin imagenes externas -->
+      <div class="relative">
+        <div
+          class="relative rounded-4xl border border-ink-200/80 bg-gradient-to-br from-brand-50 via-white to-mint-50 p-8 sm:p-12"
+        >
+          <svg
+            class="mx-auto h-56 w-56 text-brand-500/90 sm:h-72 sm:w-72"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="0.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            role="img"
+            aria-label="Ilustración de una pieza dental sana"
+          >
+            <path
+              d="M12 3c-2.1 0-3 1-4.5 1C6.1 4 4.7 3.3 4 4.9c-.7 1.8-.1 4.1.7 6.1.7 1.7.9 2.6 1.1 4.3.2 1.6.3 3.1.7 3.9.4.8 1.4.8 1.8 0 .5-1 .6-2.6.9-4 .2-.9.4-1.4 1-1.4s.8.5 1 1.4c.3 1.4.4 3 .9 4 .4.8 1.4.8 1.8 0 .4-.8.5-2.3.7-3.9.2-1.7.4-2.6 1.1-4.3.8-2 1.4-4.3.7-6.1-.7-1.6-2.1-.9-3.5-.9C15 4 14.1 3 12 3Z"
+            ></path>
+            <path d="M8.6 6.6c1-.6 2.2-.7 3.4-.7" opacity="0.55"></path>
+          </svg>
+
+          <div class="mt-8 space-y-3 border-t border-ink-200/70 pt-8">
+            <div class="flex items-center justify-between gap-4 text-sm">
+              <span class="text-ink-500">Primera consulta</span>
+              <span class="font-semibold text-ink-900">Evaluación completa</span>
+            </div>
+            <div class="flex items-center justify-between gap-4 text-sm">
+              <span class="text-ink-500">Duración</span>
+              <span class="font-semibold text-ink-900">40 minutos</span>
+            </div>
+            <div class="flex items-center justify-between gap-4 text-sm">
+              <span class="text-ink-500">Presupuesto</span>
+              <span class="font-semibold text-mint-600">Sin cargo</span>
+            </div>
+          </div>
+        </div>
+
+        <a
+          href={site.whatsappHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="absolute -bottom-5 left-1/2 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-ink-200 bg-white px-5 py-3 text-sm font-semibold text-ink-900 shadow-lg shadow-ink-900/5 transition-colors hover:text-brand-700 lg:-left-6 lg:translate-x-0"
+        >
+          <Icon name="phone" class="h-4 w-4 text-mint-600" />
+          {site.whatsappLabel}
+        </a>
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,19 @@
+---
+import { brandIcons, type BrandIconName } from './icons';
+
+interface Props {
+  name: BrandIconName;
+  class?: string;
+}
+
+const { name, class: className = 'h-5 w-5' } = Astro.props;
+---
+
+<svg
+  class={className}
+  viewBox="0 0 24 24"
+  fill="currentColor"
+  aria-hidden="true"
+  focusable="false"
+  set:html={brandIcons[name]}
+/>
