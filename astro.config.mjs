@@ -6,7 +6,7 @@ import vercel from '@astrojs/vercel';
 export default defineConfig({
   // Dominio publico del sitio: de aqui salen el enlace canonico, og:url y el JSON-LD.
   // Al conectar un dominio propio en Vercel, actualizar esta URL y redesplegar.
-  site: 'https://dentaclinic.vercel.app',
+  site: 'https://dentaclinica.vercel.app',
 
   // Modelo hibrido: la landing se prerenderiza (sigue siendo HTML estatico),
   // y solo las rutas que declaran `prerender = false` corren en servidor.

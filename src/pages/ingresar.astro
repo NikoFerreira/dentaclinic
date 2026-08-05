@@ -22,6 +22,12 @@ const requested = Astro.url.searchParams.get('redirigir');
 let error: string | null = null;
 let email = '';
 
+/**
+ * Nota sobre astro check: por el `return` temprano de arriba, el generador de
+ * tipos de Astro marca el codigo posterior como inalcanzable y avisa que
+ * `safeRedirect` "nunca se usa". Es un falso positivo: en ejecucion si se usa
+ * (verificado por HTTP). No borrar el import.
+ */
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   email = String(form.get('email') ?? '');

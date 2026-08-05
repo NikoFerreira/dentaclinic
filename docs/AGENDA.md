@@ -21,13 +21,19 @@ estático.
 En [supabase.com](https://supabase.com) → **New project**. Anotá la contraseña de
 la base: se muestra una sola vez.
 
-Después, en **Project Settings → Database → Connection string**, copiá dos cadenas:
+Después, con el botón **Connect**, copiá dos cadenas en formato URI:
 
 - **Transaction pooler** (puerto `6543`) → va en `DATABASE_URL`
-- **Direct connection** (puerto `5432`) → va en `DIRECT_URL`
+- **Session pooler** (puerto `5432`) → va en `DIRECT_URL`
 
-Hacen falta las dos: el pooler es el adecuado para funciones serverless, pero no
-admite las sentencias DDL que necesitan las migraciones.
+Hacen falta las dos: el pooler en modo *transaction* es el adecuado para
+funciones serverless, pero no mantiene la sesión y por eso no admite las
+sentencias DDL de las migraciones.
+
+> Usá el **Session pooler**, no la **Direct connection**. En el plan gratuito la
+> conexión directa es solo IPv6, y si tu red no tiene IPv6 falla con un timeout
+> que no explica la causa. El session pooler es compatible con IPv4 y se comporta
+> igual para migraciones.
 
 ### 2. Configurar el entorno local
 
@@ -54,7 +60,32 @@ El seed carga las seis especialidades, los horarios de atención y el usuario
 administrador definido en `.env`. Se puede volver a ejecutar sin duplicar datos
 (si el admin ya existe, le actualiza la contraseña, útil si perdiste el acceso).
 
-### 4. Levantar el proyecto
+### 4. Cerrar el acceso público a las tablas
+
+```bash
+npm run db:harden
+```
+
+**Este paso no es opcional en Supabase.** Supabase expone automáticamente el
+esquema `public` como API REST y otorga permisos al rol `anon`, cuya clave viaja
+en el navegador. Las tablas creadas por migración **no** tienen activado el
+aislamiento por filas, así que sin esto una petición como
+
+```
+GET https://<proyecto>.supabase.co/rest/v1/users?select=*
+```
+
+devolvería nombres, teléfonos, correos y motivos de consulta de los pacientes.
+
+El script activa `row level security` en todas las tablas del esquema (sin
+definir políticas, lo que equivale a denegar todo) y revoca los permisos de
+`anon` y `authenticated`. La aplicación no se ve afectada: se conecta como
+`postgres`, dueño de las tablas, y el dueño no queda sujeto a RLS.
+
+Toma los nombres del esquema, así que una tabla nueva queda cubierta sin editar
+el script. Es idempotente y verifica el estado real al terminar.
+
+### 5. Levantar el proyecto
 
 ```bash
 npm run dev
@@ -67,7 +98,7 @@ npm run dev
 - `/mis-turnos` → turnos del paciente
 - `/admin` → panel de administración
 
-### 5. Desplegar en Vercel
+### 6. Desplegar en Vercel
 
 En **Project Settings → Environment Variables** cargá `DATABASE_URL` y
 `DIRECT_URL`. Sin eso el build funciona (la landing es estática) pero las rutas
@@ -172,11 +203,27 @@ npm run check
 npm run check:schedule
 ```
 
+```bash
+npm run check:agenda
+```
+
 `check:schedule` ejecuta 37 comprobaciones sobre la lógica de horarios sin
 necesitar base de datos: conversión de zona horaria, ida y vuelta de instantes,
 cruces de mes y año bisiesto, armado de la grilla, liberación de horarios
 cancelados, ocultamiento del nombre en turnos ajenos y rechazo de horas fuera de
 grilla.
+
+`check:agenda` ejecuta 33 comprobaciones **contra Postgres real** usando PGlite
+(Postgres compilado a WebAssembly, en memoria, dentro del propio proceso). No
+necesita instalar Postgres ni conectarse a Supabase: aplica la misma migración
+que producción y verifica la estructura, el hasheo Argon2id, la reserva, la
+garantía anti-duplicados con dos peticiones simultáneas, la liberación de
+horarios al cancelar y el ocultamiento de nombres ajenos.
+
+Importa las funciones de producción, no copias: si una se rompe, estas
+comprobaciones fallan. Así se detectó que `isUniqueViolation` no reconocía las
+violaciones de unicidad envueltas por Drizzle, lo que convertía dos mensajes de
+error en un 500.
 
 ---
 
