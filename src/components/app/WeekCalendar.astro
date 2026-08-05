@@ -1,0 +1,177 @@
+---
+import Icon from '../Icon.astro';
+import { SLOT_META } from './slotStyles';
+import { addDays, formatTime, toISODate, todayInClinic, type CalendarDate, type DayColumn } from '../../lib/schedule';
+
+interface Props {
+  days: DayColumn[];
+  weekStart: CalendarDate;
+  /** Ruta base para la navegación de semanas ('/agenda' o '/admin'). */
+  baseHref: string;
+  /** Si los huecos libres son enlaces para reservar. */
+  bookable: boolean;
+}
+
+const { days, weekStart, baseHref, bookable } = Astro.props;
+
+const previousIso = toISODate(addDays(weekStart, -7));
+const nextIso = toISODate(addDays(weekStart, 7));
+const todayIso = toISODate(todayInClinic());
+
+const first = days[0];
+const last = days[days.length - 1];
+const rangeLabel = `${first.labels.short} al ${last.labels.short}`;
+
+const bookHref = (startsAt: Date) =>
+  `/agenda/reservar?inicio=${encodeURIComponent(startsAt.toISOString())}`;
+
+const legendStates = ['free', 'pending', 'confirmed', 'blocked', 'past'] as const;
+---
+
+<section aria-labelledby="calendario-titulo">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h2 id="calendario-titulo" class="text-lg font-semibold tracking-tight text-ink-900">
+        Semana del {rangeLabel}
+      </h2>
+      <p class="mt-1 text-sm text-ink-500">Horario de Asunción (GMT-3)</p>
+    </div>
+
+    <nav class="flex items-center gap-2" aria-label="Cambiar de semana">
+      <a
+        href={`${baseHref}?semana=${previousIso}`}
+        rel="prev"
+        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-ink-200 text-ink-700 transition-colors hover:border-brand-200 hover:text-brand-700"
+      >
+        <span class="sr-only">Semana anterior</span>
+        <Icon name="arrowLeft" class="h-4 w-4" />
+      </a>
+      <a
+        href={`${baseHref}?semana=${todayIso}`}
+        class="inline-flex h-10 items-center rounded-lg border border-ink-200 px-4 text-sm font-medium text-ink-700 transition-colors hover:border-brand-200 hover:text-brand-700"
+      >
+        Hoy
+      </a>
+      <a
+        href={`${baseHref}?semana=${nextIso}`}
+        rel="next"
+        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-ink-200 text-ink-700 transition-colors hover:border-brand-200 hover:text-brand-700"
+      >
+        <span class="sr-only">Semana siguiente</span>
+        <Icon name="arrowRight" class="h-4 w-4" />
+      </a>
+    </nav>
+  </div>
+
+  <ul class="mt-4 flex flex-wrap gap-x-5 gap-y-2" aria-label="Referencia de estados">
+    {
+      legendStates.map((state) => (
+        <li class="inline-flex items-center gap-2 text-xs text-ink-500">
+          <span
+            class:list={[
+              'inline-flex h-5 w-5 items-center justify-center rounded border',
+              SLOT_META[state].classes.replace(/hover:[^\s]+/g, ''),
+            ]}
+          >
+            <Icon name={SLOT_META[state].icon} class="h-3 w-3" strokeWidth={2} />
+          </span>
+          {SLOT_META[state].legend}
+        </li>
+      ))
+    }
+  </ul>
+
+  <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+    {
+      days.map((day) => (
+        <div
+          class:list={[
+            'rounded-2xl border p-3',
+            day.isToday ? 'border-brand-300 bg-brand-50/40' : 'border-ink-200/80 bg-white',
+          ]}
+        >
+          <h3 class="px-1 pb-3">
+            <span class="block text-xs font-semibold uppercase tracking-wider text-ink-500">
+              {day.labels.weekday}
+            </span>
+            <span
+              class:list={[
+                'block text-sm font-semibold',
+                day.isToday ? 'text-brand-700' : 'text-ink-900',
+              ]}
+            >
+              {day.labels.short}
+              {day.isToday && <span class="ml-1.5 text-xs font-medium">· hoy</span>}
+            </span>
+          </h3>
+
+          {day.slots.length === 0 ? (
+            <p class="rounded-xl border border-dashed border-ink-200 px-3 py-4 text-center text-xs text-ink-500">
+              Sin atención
+            </p>
+          ) : (
+            <ul class="space-y-1.5">
+              {day.slots.map((slot) => {
+                const meta = SLOT_META[slot.state];
+                const time = formatTime(slot.startsAt);
+                const isLink = bookable && slot.state === 'free';
+
+                const inner = (
+                  <>
+                    <span class="flex items-center justify-between gap-2">
+                      <span class="font-medium tabular-nums">{time}</span>
+                      <Icon name={meta.icon} class="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                    </span>
+                    <span class="mt-0.5 block truncate text-[0.7rem] leading-tight opacity-90">
+                      {slot.appointment
+                        ? (slot.appointment.patientName ?? meta.label)
+                        : meta.label}
+                    </span>
+                    {slot.appointment?.patientName && (
+                      <span class="block truncate text-[0.65rem] leading-tight opacity-75">
+                        {slot.appointment.serviceName}
+                      </span>
+                    )}
+                    {slot.appointment?.isOwn && (
+                      <span class="mt-1 inline-block rounded bg-mint-100 px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-mint-600">
+                        Tu turno
+                      </span>
+                    )}
+                  </>
+                );
+
+                return (
+                  <li>
+                    {isLink ? (
+                      <a
+                        href={bookHref(slot.startsAt)}
+                        class:list={['block rounded-xl border px-2.5 py-2 text-xs transition-colors', meta.classes]}
+                      >
+                        <span class="sr-only">
+                          Reservar {day.labels.long} a las {time}.
+                        </span>
+                        {inner}
+                      </a>
+                    ) : (
+                      <div
+                        class:list={[
+                          'rounded-xl border px-2.5 py-2 text-xs',
+                          meta.classes.replace(/hover:[^\s]+/g, ''),
+                        ]}
+                      >
+                        <span class="sr-only">
+                          {day.labels.long} a las {time}: {meta.label}.
+                        </span>
+                        {inner}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      ))
+    }
+  </div>
+</section>

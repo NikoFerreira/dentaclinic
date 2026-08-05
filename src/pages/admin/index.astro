@@ -1,0 +1,204 @@
+---
+export const prerender = false;
+
+import AppLayout from '../../layouts/AppLayout.astro';
+import Icon from '../../components/Icon.astro';
+import {
+  ALERT_ERROR,
+  ALERT_OK,
+  BUTTON_DANGER,
+  BUTTON_PRIMARY,
+  BUTTON_SECONDARY,
+} from '../../components/app/formStyles';
+import { listPendingAppointments, listUpcomingConfirmed } from '../../lib/agenda';
+import { formatFull, formatTime } from '../../lib/schedule';
+
+const { user } = Astro.locals;
+if (!user) return Astro.redirect('/ingresar', 303);
+// El middleware ya bloquea a los clientes; esta guarda es defensa en profundidad.
+if (user.role !== 'admin') return Astro.redirect('/agenda', 303);
+
+const [pending, confirmed] = await Promise.all([
+  listPendingAppointments(),
+  listUpcomingConfirmed(),
+]);
+
+const params = Astro.url.searchParams;
+const notices = {
+  confirmed: params.get('confirmado') === '1',
+  updated: params.get('actualizado') === '1',
+  cancelled: params.get('cancelado') === '1',
+  invalid: params.get('estado') === 'invalido',
+};
+const currentPath = '/admin';
+---
+
+<AppLayout title="Solicitudes" user={user}>
+  <header class="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-semibold tracking-tight text-ink-900">Solicitudes de turno</h1>
+      <p class="mt-2 text-[0.975rem] leading-relaxed text-ink-500">
+        Confirmá o rechazá los pedidos de los pacientes. Al rechazar, el horario vuelve a quedar
+        libre.
+      </p>
+    </div>
+    <a href="/agenda" class={BUTTON_SECONDARY}>
+      <Icon name="calendar" class="h-4 w-4" />
+      Ver calendario
+    </a>
+  </header>
+
+  {
+    (notices.confirmed || notices.updated || notices.cancelled) && (
+      <p class={`mb-6 ${ALERT_OK}`} role="status">
+        <Icon name="check" class="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} />
+        <span>
+          {notices.confirmed
+            ? 'Turno confirmado.'
+            : notices.cancelled
+              ? 'Turno cancelado; el horario quedó libre.'
+              : 'Turno actualizado.'}
+        </span>
+      </p>
+    )
+  }
+  {
+    notices.invalid && (
+      <p class={`mb-6 ${ALERT_ERROR}`} role="alert">
+        <Icon name="alert" class="mt-0.5 h-4 w-4 shrink-0" />
+        <span>Ese turno ya había cambiado de estado. La lista está actualizada.</span>
+      </p>
+    )
+  }
+
+  <section aria-labelledby="pendientes-titulo">
+    <h2 id="pendientes-titulo" class="flex items-center gap-3 text-lg font-semibold tracking-tight text-ink-900">
+      Pendientes
+      {
+        pending.length > 0 && (
+          <span class="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+            {pending.length}
+          </span>
+        )
+      }
+    </h2>
+
+    {
+      pending.length === 0 ? (
+        <p class="mt-4 rounded-2xl border border-dashed border-ink-200 bg-white p-8 text-center text-sm text-ink-500">
+          No hay solicitudes esperando respuesta.
+        </p>
+      ) : (
+        <ul class="mt-4 space-y-3">
+          {pending.map((item) => (
+            <li class="rounded-2xl border border-amber-300 bg-white p-5">
+              <div class="flex flex-wrap items-start justify-between gap-5">
+                <div class="min-w-0">
+                  <p class="text-base font-semibold capitalize text-ink-900">
+                    {formatFull(item.startsAt)}
+                  </p>
+                  <p class="mt-1 text-sm text-ink-500">
+                    {item.serviceName} · hasta las {formatTime(item.endsAt)}
+                  </p>
+
+                  <dl class="mt-4 space-y-1.5 text-sm">
+                    <div class="flex gap-2">
+                      <dt class="text-ink-500">Paciente:</dt>
+                      <dd class="font-medium text-ink-900">{item.patientName}</dd>
+                    </div>
+                    <div class="flex gap-2">
+                      <dt class="text-ink-500">Teléfono:</dt>
+                      <dd>
+                        <a
+                          href={`tel:${item.patientPhone.replace(/[^\d+]/g, '')}`}
+                          class="font-medium text-brand-700 underline underline-offset-4"
+                        >
+                          {item.patientPhone}
+                        </a>
+                      </dd>
+                    </div>
+                    <div class="flex gap-2">
+                      <dt class="text-ink-500">Correo:</dt>
+                      <dd>
+                        <a
+                          href={`mailto:${item.patientEmail}`}
+                          class="font-medium text-brand-700 underline underline-offset-4"
+                        >
+                          {item.patientEmail}
+                        </a>
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {item.notes && (
+                    <p class="mt-4 max-w-prose rounded-xl bg-page p-3 text-sm leading-relaxed text-ink-700">
+                      {item.notes}
+                    </p>
+                  )}
+                </div>
+
+                <div class="flex flex-col gap-2">
+                  <form method="POST" action={`/api/turnos/${item.id}`}>
+                    <input type="hidden" name="accion" value="confirmar" />
+                    <input type="hidden" name="volverA" value={currentPath} />
+                    <button type="submit" class={`w-full ${BUTTON_PRIMARY}`}>
+                      <Icon name="check" class="h-4 w-4" strokeWidth={2} />
+                      Confirmar
+                    </button>
+                  </form>
+                  <form method="POST" action={`/api/turnos/${item.id}`}>
+                    <input type="hidden" name="accion" value="rechazar" />
+                    <input type="hidden" name="volverA" value={currentPath} />
+                    <button type="submit" class={`w-full ${BUTTON_DANGER}`}>
+                      <Icon name="close" class="h-4 w-4" />
+                      Rechazar
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </section>
+
+  <section class="mt-12" aria-labelledby="confirmados-titulo">
+    <h2 id="confirmados-titulo" class="text-lg font-semibold tracking-tight text-ink-900">
+      Próximos confirmados
+    </h2>
+
+    {
+      confirmed.length === 0 ? (
+        <p class="mt-4 rounded-2xl border border-dashed border-ink-200 bg-white p-8 text-center text-sm text-ink-500">
+          Todavía no hay turnos confirmados a futuro.
+        </p>
+      ) : (
+        <ul class="mt-4 divide-y divide-ink-200/80 overflow-hidden rounded-2xl border border-ink-200/80 bg-white">
+          {confirmed.map((item) => (
+            <li class="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+              <div class="min-w-0">
+                <p class="text-sm font-medium capitalize text-ink-900">{formatFull(item.startsAt)}</p>
+                <p class="mt-0.5 truncate text-sm text-ink-500">
+                  {item.patientName} · {item.serviceName} · {item.patientPhone}
+                </p>
+              </div>
+              <div class="flex gap-2">
+                <form method="POST" action={`/api/turnos/${item.id}`}>
+                  <input type="hidden" name="accion" value="completar" />
+                  <input type="hidden" name="volverA" value={currentPath} />
+                  <button type="submit" class={BUTTON_SECONDARY}>Marcar atendido</button>
+                </form>
+                <form method="POST" action={`/api/turnos/${item.id}`}>
+                  <input type="hidden" name="accion" value="cancelar" />
+                  <input type="hidden" name="volverA" value={currentPath} />
+                  <button type="submit" class={BUTTON_DANGER}>Cancelar</button>
+                </form>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </section>
+</AppLayout>

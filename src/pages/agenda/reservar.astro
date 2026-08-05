@@ -1,0 +1,213 @@
+---
+export const prerender = false;
+
+import AppLayout from '../../layouts/AppLayout.astro';
+import Icon from '../../components/Icon.astro';
+import {
+  ALERT_ERROR,
+  BUTTON_PRIMARY,
+  BUTTON_SECONDARY,
+  FIELD,
+  HINT,
+  LABEL,
+} from '../../components/app/formStyles';
+import { db } from '../../db';
+import { appointments } from '../../db/schema';
+import {
+  isSlotTaken,
+  listActiveServices,
+  listAvailabilityRules,
+  listBlackoutsOverlapping,
+} from '../../lib/agenda';
+import { isUniqueViolation } from '../../lib/http';
+import { bookingSchema, firstIssue } from '../../lib/validation';
+import { formatFull, formatTime, isValidSlotStart, toISODate, todayInClinic } from '../../lib/schedule';
+
+const { user } = Astro.locals;
+if (!user) return Astro.redirect('/ingresar', 303);
+
+/** Un administrador gestiona desde el panel, no reserva para sí mismo. */
+if (user.role === 'admin') return Astro.redirect('/admin', 303);
+
+const rawStart =
+  Astro.request.method === 'POST' ? null : Astro.url.searchParams.get('inicio');
+
+let error: string | null = null;
+let startsAt: Date | null = null;
+let slotMinutes = 30;
+let notes = '';
+let selectedServiceId = '';
+
+const services = await listActiveServices();
+const rules = await listAvailabilityRules();
+
+/**
+ * Valida un instante recibido del cliente. No basta con que sea una fecha:
+ * tiene que caer exactamente en un hueco de la grilla, estar en el futuro, no
+ * pisar un bloqueo y no estar ya ocupado. Si no, alguien podría reservar a
+ * cualquier hora manipulando el parámetro.
+ */
+async function resolveSlot(value: string): Promise<{ startsAt: Date; slotMinutes: number } | string> {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'El horario indicado no es válido.';
+
+  const rule = isValidSlotStart(parsed, rules);
+  if (!rule) return 'Ese horario no forma parte de la agenda de atención.';
+
+  if (parsed.getTime() <= Date.now()) return 'Ese horario ya pasó. Elegí uno futuro.';
+
+  const endsAt = new Date(parsed.getTime() + rule.slotMinutes * 60000);
+  const overlapping = await listBlackoutsOverlapping(parsed, endsAt);
+  if (overlapping.length > 0) {
+    return 'El consultorio está cerrado en ese horario.';
+  }
+
+  if (await isSlotTaken(parsed)) return 'Ese horario acaba de ser reservado. Elegí otro.';
+
+  return { startsAt: parsed, slotMinutes: rule.slotMinutes };
+}
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  notes = String(form.get('notes') ?? '');
+  selectedServiceId = String(form.get('serviceId') ?? '');
+
+  const parsed = bookingSchema.safeParse({
+    startsAt: String(form.get('startsAt') ?? ''),
+    serviceId: selectedServiceId,
+    notes,
+  });
+
+  if (!parsed.success) {
+    error = firstIssue(parsed.error);
+  } else if (!services.some((service) => service.id === parsed.data.serviceId)) {
+    error = 'Elegí una especialidad válida.';
+  } else {
+    const resolved = await resolveSlot(parsed.data.startsAt);
+
+    if (typeof resolved === 'string') {
+      error = resolved;
+    } else {
+      startsAt = resolved.startsAt;
+      slotMinutes = resolved.slotMinutes;
+
+      try {
+        await db.insert(appointments).values({
+          userId: user.id,
+          serviceId: parsed.data.serviceId,
+          startsAt: resolved.startsAt,
+          endsAt: new Date(resolved.startsAt.getTime() + resolved.slotMinutes * 60000),
+          status: 'pending',
+          notes: parsed.data.notes,
+        });
+
+        return Astro.redirect('/mis-turnos?solicitado=1', 303);
+      } catch (cause) {
+        // El índice único parcial rechazó la reserva: alguien ganó la carrera.
+        if (isUniqueViolation(cause)) {
+          error = 'Ese horario acaba de ser reservado por otra persona. Elegí otro.';
+        } else {
+          throw cause;
+        }
+      }
+    }
+  }
+} else if (rawStart) {
+  const resolved = await resolveSlot(rawStart);
+  if (typeof resolved === 'string') {
+    error = resolved;
+  } else {
+    startsAt = resolved.startsAt;
+    slotMinutes = resolved.slotMinutes;
+  }
+} else {
+  error = 'No indicaste ningún horario.';
+}
+
+const backHref = startsAt
+  ? `/agenda?semana=${toISODate(todayInClinic(startsAt))}`
+  : '/agenda';
+const endsAt = startsAt ? new Date(startsAt.getTime() + slotMinutes * 60000) : null;
+---
+
+<AppLayout title="Confirmar turno" user={user}>
+  <div class="mx-auto max-w-xl">
+    <a
+      href={backHref}
+      class="inline-flex items-center gap-2 text-sm font-medium text-ink-500 transition-colors hover:text-brand-700"
+    >
+      <Icon name="arrowLeft" class="h-4 w-4" />
+      Volver al calendario
+    </a>
+
+    <h1 class="mt-5 text-3xl font-semibold tracking-tight text-ink-900">Confirmar solicitud</h1>
+
+    {
+      error && (
+        <p class={`mt-6 ${ALERT_ERROR}`} role="alert">
+          <Icon name="alert" class="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </p>
+      )
+    }
+
+    {
+      startsAt && endsAt ? (
+        <form method="POST" class="mt-6 space-y-6" novalidate>
+          <input type="hidden" name="startsAt" value={startsAt.toISOString()} />
+
+          <div class="rounded-2xl border border-brand-200 bg-brand-50 p-5">
+            <p class="text-xs font-semibold uppercase tracking-wider text-brand-700">
+              Horario elegido
+            </p>
+            <p class="mt-2 text-lg font-semibold capitalize text-ink-900">{formatFull(startsAt)}</p>
+            <p class="mt-1 text-sm text-ink-500">
+              Duración estimada: {slotMinutes} minutos (hasta las {formatTime(endsAt)})
+            </p>
+          </div>
+
+          <div>
+            <label class={LABEL} for="serviceId">Especialidad</label>
+            <select class={`mt-2 ${FIELD}`} id="serviceId" name="serviceId" required>
+              <option value="" disabled selected={!selectedServiceId}>
+                Seleccioná una opción
+              </option>
+              {services.map((service) => (
+                <option value={service.id} selected={selectedServiceId === String(service.id)}>
+                  {service.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label class={LABEL} for="notes">
+              Motivo de consulta <span class="font-normal text-ink-500">(opcional)</span>
+            </label>
+            <textarea class={`mt-2 resize-y ${FIELD}`} id="notes" name="notes" rows="3" maxlength="500"
+              >{notes}</textarea
+            >
+            <p class={HINT}>
+              Contanos brevemente qué te pasa. Evitá incluir datos que no hagan falta.
+            </p>
+          </div>
+
+          <div class="flex flex-col gap-3 sm:flex-row">
+            <button type="submit" class={`flex-1 ${BUTTON_PRIMARY}`}>
+              <Icon name="calendar" class="h-4 w-4" />
+              Solicitar este turno
+            </button>
+            <a href={backHref} class={BUTTON_SECONDARY}>Elegir otro horario</a>
+          </div>
+
+          <p class="text-xs leading-relaxed text-ink-500">
+            La solicitud queda pendiente hasta que el consultorio la confirme. Vas a poder seguir su
+            estado en «Mis turnos».
+          </p>
+        </form>
+      ) : (
+        <a href="/agenda" class={`mt-6 ${BUTTON_PRIMARY}`}>Volver a elegir un horario</a>
+      )
+    }
+  </div>
+</AppLayout>

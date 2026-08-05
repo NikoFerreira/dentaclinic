@@ -1,0 +1,119 @@
+---
+import '@fontsource-variable/inter';
+import '../styles/global.css';
+import Icon from '../components/Icon.astro';
+import Logo from '../components/Logo.astro';
+import type { SessionUser } from '../lib/auth';
+
+interface Props {
+  title: string;
+  user: SessionUser;
+}
+
+const { title, user } = Astro.props;
+const isAdmin = user.role === 'admin';
+const path = Astro.url.pathname;
+
+const links = isAdmin
+  ? [
+      { href: '/admin', label: 'Solicitudes' },
+      { href: '/agenda', label: 'Calendario' },
+    ]
+  : [
+      { href: '/agenda', label: 'Reservar turno' },
+      { href: '/mis-turnos', label: 'Mis turnos' },
+    ];
+
+const isActive = (href: string) => path === href || path.startsWith(`${href}/`);
+---
+
+<!doctype html>
+<html lang="es" class="antialiased">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} — DentaClinic</title>
+    <!-- Area privada: nunca debe aparecer en buscadores. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#0d7482" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+
+  <body class="min-h-dvh">
+    <a
+      href="#contenido"
+      class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+    >
+      Saltar al contenido principal
+    </a>
+
+    <header class="border-b border-ink-200/70 bg-white">
+      <div class="container-page flex h-16 items-center justify-between gap-4">
+        <div class="flex items-center gap-6">
+          <a href="/" class="shrink-0 rounded-lg" aria-label="DentaClinic, ir al inicio">
+            <Logo />
+          </a>
+          <nav class="hidden items-center gap-1 sm:flex" aria-label="Navegación de la agenda">
+            {
+              links.map((link) => (
+                <a
+                  href={link.href}
+                  aria-current={isActive(link.href) ? 'page' : undefined}
+                  class:list={[
+                    'rounded-lg px-3.5 py-2 text-sm font-medium transition-colors',
+                    isActive(link.href)
+                      ? 'bg-brand-50 text-brand-700'
+                      : 'text-ink-700 hover:bg-ink-100',
+                  ]}
+                >
+                  {link.label}
+                </a>
+              ))
+            }
+          </nav>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <span class="hidden text-right text-sm leading-tight md:block">
+            <span class="block font-medium text-ink-900">{user.fullName}</span>
+            <span class="block text-xs text-ink-500">
+              {isAdmin ? 'Administración' : 'Paciente'}
+            </span>
+          </span>
+          <form method="POST" action="/salir">
+            <button
+              type="submit"
+              class="inline-flex items-center gap-2 rounded-full border border-ink-200 px-4 py-2 text-sm font-medium text-ink-700 transition-colors hover:border-brand-200 hover:text-brand-700"
+            >
+              <Icon name="logout" class="h-4 w-4" />
+              <span class="hidden sm:inline">Salir</span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <nav class="border-t border-ink-200/70 sm:hidden" aria-label="Navegación de la agenda">
+        <div class="container-page flex gap-1 py-2">
+          {
+            links.map((link) => (
+              <a
+                href={link.href}
+                aria-current={isActive(link.href) ? 'page' : undefined}
+                class:list={[
+                  'flex-1 rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors',
+                  isActive(link.href) ? 'bg-brand-50 text-brand-700' : 'text-ink-700',
+                ]}
+              >
+                {link.label}
+              </a>
+            ))
+          }
+        </div>
+      </nav>
+    </header>
+
+    <main id="contenido" class="container-page py-8 sm:py-12">
+      <slot />
+    </main>
+  </body>
+</html>
