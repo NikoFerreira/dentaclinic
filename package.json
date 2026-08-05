@@ -16,7 +16,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "check:agenda": "tsx scripts/check-agenda.ts"
   },
   "dependencies": {
     "@astrojs/vercel": "^11.0.4",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@electric-sql/pglite": "^0.5.4",
     "@types/node": "^26.1.2",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.23.7",

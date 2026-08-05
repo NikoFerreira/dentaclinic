@@ -18,6 +18,9 @@ pnpm-debug.log*
 # vercel (credenciales locales del proyecto vinculado)
 .vercel
 
+# base de datos local de demostracion (PGlite)
+.pglite/
+
 # ajustes locales de Claude Code (especificos de cada maquina)
 .claude/settings.local.json
 

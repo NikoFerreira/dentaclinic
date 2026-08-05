@@ -17,8 +17,22 @@ export function safeRedirect(value: string | null | undefined, fallback: string)
 /** Codigo de PostgreSQL para violacion de restriccion unica. */
 const UNIQUE_VIOLATION = '23505';
 
+/**
+ * Detecta una violacion de restriccion unica recorriendo la cadena de causas.
+ *
+ * Drizzle envuelve los errores del driver en `DrizzleQueryError`, que no expone
+ * `code` en el nivel superior: el codigo de PostgreSQL queda en `error.cause`.
+ * Mirar solo el primer nivel hacia que estas violaciones pasaran por
+ * desapercibidas y terminaran en un error 500 en lugar de un mensaje util
+ * ("ese correo ya existe", "ese horario acaba de ser reservado").
+ */
 export function isUniqueViolation(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error
-    ? (error as { code?: string }).code === UNIQUE_VIOLATION
-    : false;
+  let current: unknown = error;
+
+  for (let depth = 0; current !== null && current !== undefined && depth < 5; depth += 1) {
+    if ((current as { code?: unknown }).code === UNIQUE_VIOLATION) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+
+  return false;
 }
