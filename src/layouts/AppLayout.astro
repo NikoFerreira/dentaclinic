@@ -18,13 +18,28 @@ const links = isAdmin
   ? [
       { href: '/admin', label: 'Solicitudes' },
       { href: '/agenda', label: 'Calendario' },
+      { href: '/admin/horarios', label: 'Horarios' },
+      { href: '/admin/feriados', label: 'Feriados' },
     ]
   : [
       { href: '/agenda', label: 'Reservar turno' },
       { href: '/mis-turnos', label: 'Mis turnos' },
     ];
 
-const isActive = (href: string) => path === href || path.startsWith(`${href}/`);
+/**
+ * Se marca activa la coincidencia MAS LARGA, no cualquier prefijo. Con
+ * `/admin` y `/admin/horarios` en el menu, un prefijo simple resaltaria las dos
+ * y pondria `aria-current="page"` en dos enlaces a la vez.
+ */
+const matchLength = (href: string) =>
+  path === href || path.startsWith(`${href}/`) ? href.length : -1;
+
+const activeHref = links.reduce(
+  (best, link) => (matchLength(link.href) > matchLength(best) ? link.href : best),
+  '',
+);
+
+const isActive = (href: string) => href === activeHref;
 ---
 
 <!doctype html>
@@ -93,14 +108,15 @@ const isActive = (href: string) => path === href || path.startsWith(`${href}/`);
       </div>
 
       <nav class="border-t border-ink-200/70 sm:hidden" aria-label="Navegación de la agenda">
-        <div class="container-page flex gap-1 py-2">
+        <!-- Scroll horizontal: con cuatro enlaces no caben repartidos en 375 px -->
+        <div class="container-page flex gap-1 overflow-x-auto py-2">
           {
             links.map((link) => (
               <a
                 href={link.href}
                 aria-current={isActive(link.href) ? 'page' : undefined}
                 class:list={[
-                  'flex-1 rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors',
+                  'shrink-0 rounded-lg px-3.5 py-2 text-center text-sm font-medium transition-colors',
                   isActive(link.href) ? 'bg-brand-50 text-brand-700' : 'text-ink-700',
                 ]}
               >

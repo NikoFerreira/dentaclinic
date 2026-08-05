@@ -126,6 +126,52 @@ export function isSameDate(a: CalendarDate, b: CalendarDate): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Horas de pared, como las escribe una persona
+// ---------------------------------------------------------------------------
+
+/** 0 = domingo ... 6 = sabado, igual que `weekdayOf`. */
+export const WEEKDAY_NAMES = [
+  'Domingo',
+  'Lunes',
+  'Martes',
+  'Miércoles',
+  'Jueves',
+  'Viernes',
+  'Sábado',
+] as const;
+
+/** 480 -> "08:00". Para mostrar y para el valor de un <input type="time">. */
+export function minutesToTime(minutes: number): string {
+  return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+}
+
+/**
+ * Dia de la semana y minutos desde medianoche de un instante, en hora local del
+ * consultorio. Sirve para comparar un turno guardado en UTC contra las reglas
+ * de atencion, que estan expresadas en hora de pared.
+ */
+export function localWeekdayAndMinutes(instant: Date): { weekday: number; minutes: number } {
+  const parts = rawParts(instant);
+  return {
+    weekday: weekdayOf({ year: parts.year, month: parts.month, day: parts.day }),
+    minutes: parts.hour * 60 + parts.minute,
+  };
+}
+
+/** "08:00" -> 480. Devuelve `null` si no es una hora valida del dia. */
+export function timeToMinutes(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const mins = Number(match[2]);
+  if (hours > 23 || mins > 59) return null;
+
+  return hours * 60 + mins;
+}
+
+// ---------------------------------------------------------------------------
 // Formato para mostrar
 // ---------------------------------------------------------------------------
 

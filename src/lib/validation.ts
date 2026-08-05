@@ -56,6 +56,54 @@ export const appointmentActionSchema = z.object({
   volverA: z.string().optional(),
 });
 
+/** Hora de pared en formato HH:MM, como la envia un <input type="time">. */
+const wallTime = z
+  .string()
+  .trim()
+  .regex(/^\d{1,2}:\d{2}$/, 'Usá el formato HH:MM, por ejemplo 08:00.');
+
+export const availabilityRuleSchema = z
+  .object({
+    weekday: z.coerce.number().int().min(0, 'Día inválido.').max(6, 'Día inválido.'),
+    start: wallTime,
+    end: wallTime,
+    slotMinutes: z.coerce
+      .number()
+      .int()
+      .min(10, 'Los turnos deben durar al menos 10 minutos.')
+      .max(480, 'Los turnos no pueden durar más de 8 horas.'),
+  })
+  .refine((value) => value.start < value.end, {
+    message: 'La hora de fin debe ser posterior a la de inicio.',
+    path: ['end'],
+  });
+
+/** Fecha de almanaque YYYY-MM-DD, como la envia un <input type="date">. */
+const isoDate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Elegí una fecha válida.');
+
+export const blackoutSchema = z
+  .object({
+    from: isoDate,
+    to: isoDate,
+    reason: z
+      .string()
+      .trim()
+      .max(120, 'El motivo no puede superar los 120 caracteres.')
+      .optional()
+      .transform((value) => (value ? value : null)),
+  })
+  .refine((value) => value.from <= value.to, {
+    message: 'La fecha de fin no puede ser anterior a la de inicio.',
+    path: ['to'],
+  });
+
+export const deleteByIdSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
 /** Primer mensaje de error de un `safeParse`, listo para mostrar. */
 export function firstIssue(error: z.ZodError): string {
   return error.issues[0]?.message ?? 'Revisá los datos ingresados.';

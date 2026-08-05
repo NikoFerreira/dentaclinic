@@ -1,0 +1,235 @@
+---
+export const prerender = false;
+
+import AppLayout from '../../layouts/AppLayout.astro';
+import Icon from '../../components/Icon.astro';
+import {
+  ALERT_ERROR,
+  ALERT_OK,
+  BUTTON_DANGER,
+  BUTTON_PRIMARY,
+  FIELD,
+  HINT,
+  LABEL,
+} from '../../components/app/formStyles';
+import {
+  countAppointmentsUnderRule,
+  createRule,
+  deleteRule,
+  findOverlap,
+  listRules,
+} from '../../lib/admin';
+import { WEEKDAY_NAMES, minutesToTime, timeToMinutes } from '../../lib/schedule';
+import { availabilityRuleSchema, deleteByIdSchema, firstIssue } from '../../lib/validation';
+
+const { user } = Astro.locals;
+if (!user) return Astro.redirect('/ingresar', 303);
+if (user.role !== 'admin') return Astro.redirect('/agenda', 303);
+
+let error: string | null = null;
+let ok: string | null = null;
+
+/**
+ * Nota sobre astro check: por los `return` tempranos de arriba, el generador de
+ * tipos marca el codigo posterior como inalcanzable y avisa que varios imports
+ * "nunca se usan". Es un falso positivo, verificado en ejecucion.
+ */
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const accion = String(form.get('accion') ?? '');
+
+  if (accion === 'eliminar') {
+    const parsed = deleteByIdSchema.safeParse({ id: form.get('id') });
+    if (!parsed.success) {
+      error = 'No se pudo identificar el horario a eliminar.';
+    } else {
+      const existing = (await listRules()).find((rule) => rule.id === parsed.data.id);
+      if (!existing) {
+        error = 'Ese horario ya no existe.';
+      } else {
+        const afectados = await countAppointmentsUnderRule(existing);
+        await deleteRule(parsed.data.id);
+        ok =
+          afectados > 0
+            ? `Horario eliminado. Atención: ${afectados} turno(s) a futuro caían en esa franja y ya no aparecerán en el calendario; revisalos en Solicitudes.`
+            : 'Horario eliminado.';
+      }
+    }
+  } else {
+    const parsed = availabilityRuleSchema.safeParse({
+      weekday: form.get('weekday'),
+      start: form.get('start'),
+      end: form.get('end'),
+      slotMinutes: form.get('slotMinutes'),
+    });
+
+    if (!parsed.success) {
+      error = firstIssue(parsed.error);
+    } else {
+      const startMinute = timeToMinutes(parsed.data.start);
+      const endMinute = timeToMinutes(parsed.data.end);
+
+      if (startMinute === null || endMinute === null) {
+        error = 'Las horas indicadas no son válidas.';
+      } else if (endMinute - startMinute < parsed.data.slotMinutes) {
+        error = `La franja es más corta que la duración del turno (${parsed.data.slotMinutes} minutos): no cabe ningún turno.`;
+      } else {
+        const solapada = findOverlap(await listRules(), parsed.data.weekday, startMinute, endMinute);
+        if (solapada) {
+          error = `Se superpone con la franja de ${minutesToTime(solapada.startMinute)} a ${minutesToTime(solapada.endMinute)} del mismo día. Eliminá esa primero o ajustá el rango.`;
+        } else {
+          await createRule({
+            weekday: parsed.data.weekday,
+            startMinute,
+            endMinute,
+            slotMinutes: parsed.data.slotMinutes,
+          });
+          ok = 'Horario agregado.';
+        }
+      }
+    }
+  }
+}
+
+const rules = await listRules();
+
+/** Agrupadas por día, empezando el lunes como en el calendario. */
+const ordenDias = [1, 2, 3, 4, 5, 6, 0];
+const porDia = ordenDias.map((weekday) => ({
+  weekday,
+  nombre: WEEKDAY_NAMES[weekday],
+  franjas: rules.filter((rule) => rule.weekday === weekday),
+}));
+
+const totalHuecos = rules.reduce(
+  (total, rule) => total + Math.floor((rule.endMinute - rule.startMinute) / rule.slotMinutes),
+  0,
+);
+---
+
+<AppLayout title="Horarios de atención" user={user}>
+  <header class="mb-8">
+    <h1 class="text-3xl font-semibold tracking-tight text-ink-900">Horarios de atención</h1>
+    <p class="mt-2 max-w-2xl text-[0.975rem] leading-relaxed text-ink-500">
+      Definí las franjas en que el consultorio atiende. El calendario genera los huecos reservables a
+      partir de estas reglas: hoy hay <strong class="font-semibold text-ink-900">{totalHuecos}</strong>
+      huecos por semana.
+    </p>
+  </header>
+
+  {
+    ok && (
+      <p class={`mb-6 ${ALERT_OK}`} role="status">
+        <Icon name="check" class="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} />
+        <span>{ok}</span>
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class={`mb-6 ${ALERT_ERROR}`} role="alert">
+        <Icon name="alert" class="mt-0.5 h-4 w-4 shrink-0" />
+        <span>{error}</span>
+      </p>
+    )
+  }
+
+  <div class="grid gap-8 lg:grid-cols-[1.3fr_1fr] lg:gap-12">
+    <section aria-labelledby="franjas-titulo">
+      <h2 id="franjas-titulo" class="text-lg font-semibold tracking-tight text-ink-900">
+        Franjas por día
+      </h2>
+
+      <ul class="mt-4 divide-y divide-ink-200/80 overflow-hidden rounded-2xl border border-ink-200/80 bg-white">
+        {
+          porDia.map((dia) => (
+            <li class="px-5 py-4">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-ink-900">{dia.nombre}</h3>
+                {dia.franjas.length === 0 && (
+                  <span class="text-sm text-ink-500">Sin atención</span>
+                )}
+              </div>
+
+              {dia.franjas.length > 0 && (
+                <ul class="mt-3 space-y-2">
+                  {dia.franjas.map((rule) => (
+                    <li class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-200 bg-page px-4 py-2.5">
+                      <span class="text-sm">
+                        <span class="font-medium tabular-nums text-ink-900">
+                          {minutesToTime(rule.startMinute)} – {minutesToTime(rule.endMinute)}
+                        </span>
+                        <span class="ml-2 text-ink-500">
+                          turnos de {rule.slotMinutes} min ·{' '}
+                          {Math.floor((rule.endMinute - rule.startMinute) / rule.slotMinutes)} huecos
+                        </span>
+                      </span>
+                      <form method="POST">
+                        <input type="hidden" name="accion" value="eliminar" />
+                        <input type="hidden" name="id" value={rule.id} />
+                        <button type="submit" class={BUTTON_DANGER}>
+                          <Icon name="ban" class="h-4 w-4" />
+                          Eliminar
+                        </button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section aria-labelledby="agregar-titulo" class="lg:sticky lg:top-8 lg:self-start">
+      <h2 id="agregar-titulo" class="text-lg font-semibold tracking-tight text-ink-900">
+        Agregar una franja
+      </h2>
+
+      <form method="POST" class="mt-4 space-y-5 rounded-2xl border border-ink-200/80 bg-white p-6" novalidate>
+        <input type="hidden" name="accion" value="crear" />
+
+        <div>
+          <label class={LABEL} for="weekday">Día</label>
+          <select class={`mt-2 ${FIELD}`} id="weekday" name="weekday" required>
+            {ordenDias.map((weekday) => (
+              <option value={weekday}>{WEEKDAY_NAMES[weekday]}</option>
+            ))}
+          </select>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class={LABEL} for="start">Desde</label>
+            <input class={`mt-2 ${FIELD}`} id="start" name="start" type="time" value="08:00" required />
+          </div>
+          <div>
+            <label class={LABEL} for="end">Hasta</label>
+            <input class={`mt-2 ${FIELD}`} id="end" name="end" type="time" value="12:00" required />
+          </div>
+        </div>
+
+        <div>
+          <label class={LABEL} for="slotMinutes">Duración de cada turno</label>
+          <select class={`mt-2 ${FIELD}`} id="slotMinutes" name="slotMinutes" required>
+            {[15, 20, 30, 40, 45, 60, 90].map((min) => (
+              <option value={min} selected={min === 60}>
+                {min} minutos
+              </option>
+            ))}
+          </select>
+          <p class={HINT}>
+            Para un descanso al mediodía, cargá dos franjas en el mismo día (por ejemplo 08:00–12:00 y
+            14:00–20:00).
+          </p>
+        </div>
+
+        <button type="submit" class={`w-full ${BUTTON_PRIMARY}`}>
+          <Icon name="plus" class="h-4 w-4" />
+          Agregar franja
+        </button>
+      </form>
+    </section>
+  </div>
+</AppLayout>

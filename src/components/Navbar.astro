@@ -26,8 +26,18 @@ import { navLinks } from '../data/site';
     </ul>
 
     <div class="flex items-center gap-2">
+      <!--
+        Acceso a la agenda en línea. /agenda exige sesión: quien no la tenga es
+        redirigido al login y vuelve al calendario después de entrar.
+      -->
       <a
-        href="#contacto"
+        href="/ingresar"
+        class="hidden rounded-lg px-3.5 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-brand-50 hover:text-brand-700 sm:block"
+      >
+        Ingresar
+      </a>
+      <a
+        href="/agenda"
         class="hidden items-center gap-2 rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-brand-600/20 transition-colors hover:bg-brand-700 sm:inline-flex"
       >
         <Icon name="calendar" class="h-4 w-4" />
@@ -62,9 +72,17 @@ import { navLinks } from '../data/site';
           </li>
         ))
       }
-      <li class="pt-2">
+      <li class="mt-2 border-t border-ink-200/70 pt-3">
         <a
-          href="#contacto"
+          href="/ingresar"
+          class="block rounded-lg px-3 py-2.5 text-base font-medium text-ink-700 transition-colors hover:bg-brand-50 hover:text-brand-700"
+        >
+          Ingresar
+        </a>
+      </li>
+      <li class="pt-1">
+        <a
+          href="/agenda"
           class="flex items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white"
         >
           <Icon name="calendar" class="h-4 w-4" />
