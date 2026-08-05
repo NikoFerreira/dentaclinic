@@ -109,6 +109,16 @@
   }
 }
 
+/* Rayado diagonal para los horarios bloqueados: distingue el estado sin
+   depender del color, para quienes no perciben diferencias cromaticas. */
+@utility bg-stripes {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 6px,
+    rgba(85, 112, 126, 0.16) 6px 7px
+  );
+}
+
 @utility section-y {
   padding-block: 4.5rem;
 

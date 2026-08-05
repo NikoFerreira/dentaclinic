@@ -3,23 +3,37 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Landing page minimalista para el consultorio odontologico DentaClinic",
+  "description": "Agenda de turnos de DentaClinic: landing, calendario y panel de administracion",
   "license": "UNLICENSED",
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro check && astro build",
     "preview": "astro preview",
-    "check": "astro check"
+    "check": "astro check",
+    "check:schedule": "tsx scripts/check-schedule.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@astrojs/vercel": "^11.0.4",
     "@fontsource-variable/inter": "^5.3.0",
+    "@node-rs/argon2": "^2.0.2",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.1.6",
-    "tailwindcss": "^4.3.3"
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9",
+    "tailwindcss": "^4.3.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@types/node": "^26.1.2",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.7",
     "typescript": "^6.0.3"
   }
 }

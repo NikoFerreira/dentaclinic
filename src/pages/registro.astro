@@ -1,0 +1,154 @@
+---
+export const prerender = false;
+
+import AuthLayout from '../layouts/AuthLayout.astro';
+import Icon from '../components/Icon.astro';
+import { ALERT_ERROR, BUTTON_PRIMARY, FIELD, HINT, LABEL } from '../components/app/formStyles';
+import { db } from '../db';
+import { users } from '../db/schema';
+import { createSession, hashPassword, setSessionCookie } from '../lib/auth';
+import { isUniqueViolation, safeRedirect } from '../lib/http';
+import { firstIssue, registerSchema } from '../lib/validation';
+
+const { user } = Astro.locals;
+if (user) {
+  return Astro.redirect(user.role === 'admin' ? '/admin' : '/agenda', 303);
+}
+
+const requested = Astro.url.searchParams.get('redirigir');
+
+let error: string | null = null;
+const values = { fullName: '', email: '', phone: '' };
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  values.fullName = String(form.get('fullName') ?? '');
+  values.email = String(form.get('email') ?? '');
+  values.phone = String(form.get('phone') ?? '');
+
+  const parsed = registerSchema.safeParse({
+    ...values,
+    password: String(form.get('password') ?? ''),
+  });
+
+  if (!parsed.success) {
+    error = firstIssue(parsed.error);
+  } else {
+    try {
+      const [created] = await db
+        .insert(users)
+        .values({
+          fullName: parsed.data.fullName,
+          email: parsed.data.email,
+          phone: parsed.data.phone,
+          passwordHash: await hashPassword(parsed.data.password),
+          // El rol NUNCA se lee del formulario: si viniera del cliente,
+          // cualquiera podría registrarse como administrador.
+          role: 'client',
+        })
+        .returning({ id: users.id });
+
+      const { token, expiresAt } = await createSession(created.id);
+      setSessionCookie(Astro.cookies, token, expiresAt);
+      return Astro.redirect(safeRedirect(requested, '/agenda'), 303);
+    } catch (cause) {
+      if (isUniqueViolation(cause)) {
+        // Revelar que el correo ya existe permite enumerar cuentas. Se acepta
+        // porque la alternativa (verificación por correo) exige un proveedor de
+        // email, todavía no configurado.
+        error = 'Ya existe una cuenta con ese correo. Probá ingresando.';
+      } else {
+        throw cause;
+      }
+    }
+  }
+}
+
+const loginHref = requested ? `/ingresar?redirigir=${encodeURIComponent(requested)}` : '/ingresar';
+---
+
+<AuthLayout
+  title="Crear cuenta"
+  heading="Creá tu cuenta"
+  subheading="Con tu cuenta podés solicitar turnos y seguir su estado en cualquier momento."
+>
+  <form method="POST" class="mt-7 space-y-5" novalidate>
+    {
+      error && (
+        <p class={ALERT_ERROR} role="alert">
+          <Icon name="alert" class="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </p>
+      )
+    }
+
+    <div>
+      <label class={LABEL} for="fullName">Nombre completo</label>
+      <input
+        class={`mt-2 ${FIELD}`}
+        id="fullName"
+        name="fullName"
+        type="text"
+        autocomplete="name"
+        value={values.fullName}
+        placeholder="Ana Giménez"
+        required
+      />
+    </div>
+
+    <div>
+      <label class={LABEL} for="phone">Teléfono</label>
+      <input
+        class={`mt-2 ${FIELD}`}
+        id="phone"
+        name="phone"
+        type="tel"
+        inputmode="tel"
+        autocomplete="tel"
+        value={values.phone}
+        placeholder="+595 981 000 000"
+        required
+      />
+    </div>
+
+    <div>
+      <label class={LABEL} for="email">Correo electrónico</label>
+      <input
+        class={`mt-2 ${FIELD}`}
+        id="email"
+        name="email"
+        type="email"
+        autocomplete="email"
+        value={values.email}
+        placeholder="ana@correo.com"
+        required
+      />
+    </div>
+
+    <div>
+      <label class={LABEL} for="password">Contraseña</label>
+      <input
+        class={`mt-2 ${FIELD}`}
+        id="password"
+        name="password"
+        type="password"
+        autocomplete="new-password"
+        minlength="10"
+        required
+      />
+      <p class={HINT}>Al menos 10 caracteres. Usá una contraseña que no repitas en otros sitios.</p>
+    </div>
+
+    <button type="submit" class={`w-full ${BUTTON_PRIMARY}`}>Crear cuenta</button>
+  </form>
+
+  <p slot="footer" class="mt-6 text-center text-sm text-ink-500">
+    ¿Ya tenés cuenta?{' '}
+    <a
+      href={loginHref}
+      class="font-semibold text-brand-700 underline decoration-brand-200 decoration-2 underline-offset-4 hover:decoration-brand-600"
+    >
+      Ingresá
+    </a>
+  </p>
+</AuthLayout>

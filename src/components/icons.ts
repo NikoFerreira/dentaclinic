@@ -22,6 +22,13 @@ export const strokeIcons = {
   menu: `<path d="M4 7.5h16M4 12h16M4 16.5h16"/>`,
   close: `<path d="M18 6 6 18M6 6l12 12"/>`,
   arrowRight: `<path d="M4.5 12h15M13.5 6l6 6-6 6"/>`,
+  arrowLeft: `<path d="M19.5 12h-15M10.5 6l-6 6 6 6"/>`,
+  plus: `<path d="M12 5v14M5 12h14"/>`,
+  ban: `<circle cx="12" cy="12" r="9"/><path d="m5.65 5.65 12.7 12.7"/>`,
+  logout: `<path d="M9.5 21H5.5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9.5"/>`,
+  user: `<circle cx="12" cy="8" r="3.8"/><path d="M4.8 20.5a7.2 7.2 0 0 1 14.4 0"/>`,
+  alert: `<path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4M12 17.2h.01"/>`,
+  dash: `<path d="M5 12h14"/>`,
 } as const;
 
 export const brandIcons = {
