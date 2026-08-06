@@ -258,8 +258,26 @@ check('la solicitud aparece en el panel', solicitudes.body.includes('Ana Giméne
 check('con el teléfono del paciente', solicitudes.body.includes('+595 981 111 222'));
 check('y el motivo de consulta', solicitudes.body.includes('alineadores invisibles'));
 
-const turnoId = /\/api\/turnos\/([0-9a-f-]{36})/.exec(solicitudes.body)?.[1];
-check('se puede identificar el turno a confirmar', Boolean(turnoId), String(turnoId));
+/**
+ * El id se busca en la BASE, filtrando por el paciente de prueba.
+ *
+ * Antes se tomaba la primera coincidencia del HTML del panel, pero ahi se
+ * listan TODAS las solicitudes pendientes: con datos de demostracion cargados,
+ * la prueba confirmaba el turno de otro paciente y despues fallaba al
+ * cancelarlo con un 403 correcto, haciendo parecer un bug donde no habia.
+ */
+const propio = await sql<{ id: string }[]>`
+  select a.id from appointments a
+  join users u on u.id = a.user_id
+  where u.email = ${PACIENTE_A.email} and a.status = 'pending'
+  limit 1
+`;
+const turnoId = propio[0]?.id;
+check('se puede identificar el turno de Ana', Boolean(turnoId), String(turnoId));
+check(
+  'y aparece listado en el panel de administración',
+  Boolean(turnoId) && solicitudes.body.includes(turnoId),
+);
 
 if (!turnoId) {
   console.log('\nNo se pudo identificar el turno en el panel. Se detiene la prueba.');
