@@ -41,8 +41,16 @@ export const registerSchema = z.object({
 });
 
 export const bookingSchema = z.object({
-  startsAt: z.string().min(1),
-  serviceId: z.coerce.number().int().positive(),
+  startsAt: z.string().min(1, 'No se recibió ningún horario.'),
+  /**
+   * Un `select` sin elegir manda cadena vacía, que `coerce` convierte en 0.
+   * Sin mensaje propio, el usuario veía el texto por defecto de zod en inglés:
+   * "Too small: expected number to be >0".
+   */
+  serviceId: z.coerce
+    .number({ message: 'Elegí una especialidad.' })
+    .int({ message: 'Elegí una especialidad.' })
+    .positive({ message: 'Elegí una especialidad.' }),
   notes: z
     .string()
     .trim()

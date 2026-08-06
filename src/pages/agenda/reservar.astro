@@ -85,8 +85,23 @@ if (Astro.request.method === 'POST') {
   selectedPatientId = String(form.get('patientId') ?? '');
   confirmarDirecto = String(form.get('confirmar') ?? 'no') === 'si';
 
+  const rawSubmitted = String(form.get('startsAt') ?? '');
+
+  /**
+   * El horario se resuelve ANTES de validar el resto del formulario.
+   *
+   * Si no, un error en cualquier campo dejaba `startsAt` en null y la pagina
+   * ocultaba el formulario entero: se perdia lo cargado y no habia forma de
+   * corregir sin volver al calendario.
+   */
+  const preview = await resolveSlot(rawSubmitted);
+  if (typeof preview !== 'string') {
+    startsAt = preview.startsAt;
+    slotMinutes = preview.slotMinutes;
+  }
+
   const base = {
-    startsAt: String(form.get('startsAt') ?? ''),
+    startsAt: rawSubmitted,
     serviceId: selectedServiceId,
     notes,
   };
@@ -124,6 +139,8 @@ if (Astro.request.method === 'POST') {
     }
 
     if (!error) {
+      // Se revalida el horario aunque ya se resolvió arriba: entre una cosa y
+      // otra alguien pudo confirmar un turno en ese hueco.
       const resolved = await resolveSlot(parsed.data.startsAt);
 
       if (typeof resolved === 'string') {
@@ -182,6 +199,13 @@ const endsAt = startsAt ? new Date(startsAt.getTime() + slotMinutes * 60000) : n
  */
 const competencia = startsAt ? await listPendingAtSlot(startsAt) : [];
 const propias = competencia.filter((item) => item.userId === user.id).length;
+
+/**
+ * El formulario de abajo NO lleva `novalidate`, a diferencia del resto de la
+ * aplicacion: aqui no hay JavaScript que muestre los errores, asi que conviene
+ * que el navegador avise de los campos obligatorios antes de enviar. La
+ * validacion del servidor sigue siendo la que manda.
+ */
 ---
 
 <AppLayout title="Confirmar turno" user={user}>
@@ -207,7 +231,7 @@ const propias = competencia.filter((item) => item.userId === user.id).length;
 
     {
       startsAt && endsAt ? (
-        <form method="POST" class="mt-6 space-y-6" novalidate>
+        <form method="POST" class="mt-6 space-y-6">
           <input type="hidden" name="startsAt" value={startsAt.toISOString()} />
 
           <div class="rounded-2xl border border-brand-200 bg-brand-50 p-5">
