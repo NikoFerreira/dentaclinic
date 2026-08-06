@@ -18,7 +18,9 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts",
     "check:agenda": "tsx scripts/check-agenda.ts",
-    "db:harden": "tsx scripts/harden-db.ts"
+    "db:harden": "tsx scripts/harden-db.ts",
+    "check:flow": "tsx scripts/check-flow.ts",
+    "demo:seed": "tsx scripts/demo-seed.ts"
   },
   "dependencies": {
     "@astrojs/vercel": "^11.0.4",

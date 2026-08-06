@@ -23,9 +23,25 @@ function connect(): Database {
    * `max: 1` porque cada invocacion serverless es un proceso efimero; abrir mas
    * conexiones por instancia solo agota el limite del pooler.
    */
+  /**
+   * En produccion (Vercel) cada invocacion es un proceso efimero: una sola
+   * conexion es lo recomendado y abrir mas solo agota el limite del pooler.
+   *
+   * En desarrollo el proceso vive horas, y con `max: 1` una consulta trabada
+   * encola todas las siguientes de forma permanente: la aplicacion queda
+   * colgada hasta reiniciarla. Se observo en la practica. Un pool pequeno evita
+   * que un unico problema tumbe todo.
+   *
+   * No se intenta imponer `statement_timeout` desde el cliente: se comprobo que
+   * el pooler de Supabase en modo transaction ignora ese parametro de arranque,
+   * tanto como opcion de conexion como via `-c`. Para acotarlo de verdad habria
+   * que fijarlo en el rol de la base (ALTER ROLE ... SET statement_timeout).
+   */
+  const isProduction = process.env.NODE_ENV === 'production';
+
   const client = postgres(url, {
     prepare: false,
-    max: 1,
+    max: isProduction ? 1 : 5,
     idle_timeout: 20,
     connect_timeout: 10,
   });

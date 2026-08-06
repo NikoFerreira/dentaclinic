@@ -207,6 +207,10 @@ npm run check:schedule
 npm run check:agenda
 ```
 
+```bash
+npm run check:flow
+```
+
 `check:schedule` ejecuta 37 comprobaciones sobre la lógica de horarios sin
 necesitar base de datos: conversión de zona horaria, ida y vuelta de instantes,
 cruces de mes y año bisiesto, armado de la grilla, liberación de horarios
@@ -224,6 +228,17 @@ Importa las funciones de producción, no copias: si una se rompe, estas
 comprobaciones fallan. Así se detectó que `isUniqueViolation` no reconocía las
 violaciones de unicidad envueltas por Drizzle, lo que convertía dos mensajes de
 error en un 500.
+
+`check:flow` es una prueba de humo **end-to-end**: requiere `npm run dev`
+corriendo y la base configurada. Recorre 37 comprobaciones por HTTP como lo haría
+un navegador —cookies de sesión, cabecera `Origin`, redirecciones 303— sin usar
+atajos internos: login correcto e incorrecto, registro, correo duplicado,
+reserva, doble reserva del mismo horario, horario fuera de grilla, confirmación
+por administración, un paciente intentando confirmar (403), cancelación que
+libera el hueco, protección de rutas y CSRF.
+
+Crea y borra sus propios usuarios de prueba (`demo.paciente.a@example.com` y
+`demo.paciente.b@example.com`), así que es repetible.
 
 ---
 

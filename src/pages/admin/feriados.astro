@@ -1,0 +1,244 @@
+---
+export const prerender = false;
+
+import AppLayout from '../../layouts/AppLayout.astro';
+import Icon from '../../components/Icon.astro';
+import {
+  ALERT_ERROR,
+  ALERT_OK,
+  BUTTON_DANGER,
+  BUTTON_PRIMARY,
+  FIELD,
+  HINT,
+  LABEL,
+} from '../../components/app/formStyles';
+import {
+  countAppointmentsInBlackout,
+  createBlackout,
+  deleteBlackout,
+  listBlackouts,
+} from '../../lib/admin';
+import {
+  addDays,
+  formatLongDate,
+  parseISODate,
+  toISODate,
+  todayInClinic,
+  zonedToUtc,
+} from '../../lib/schedule';
+import { blackoutSchema, deleteByIdSchema, firstIssue } from '../../lib/validation';
+
+const { user } = Astro.locals;
+if (!user) return Astro.redirect('/ingresar', 303);
+if (user.role !== 'admin') return Astro.redirect('/agenda', 303);
+
+let error: string | null = null;
+let ok: string | null = null;
+
+/**
+ * Nota sobre astro check: por los `return` tempranos de arriba, el generador de
+ * tipos marca el codigo posterior como inalcanzable y avisa que varios imports
+ * "nunca se usan". Es un falso positivo, verificado en ejecucion.
+ */
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const accion = String(form.get('accion') ?? '');
+
+  if (accion === 'eliminar') {
+    const parsed = deleteByIdSchema.safeParse({ id: form.get('id') });
+    if (!parsed.success) {
+      error = 'No se pudo identificar el cierre a eliminar.';
+    } else {
+      await deleteBlackout(parsed.data.id);
+      ok = 'Cierre eliminado. Esos horarios vuelven a estar disponibles.';
+    }
+  } else {
+    const parsed = blackoutSchema.safeParse({
+      from: form.get('from'),
+      to: form.get('to'),
+      reason: form.get('reason'),
+    });
+
+    if (!parsed.success) {
+      error = firstIssue(parsed.error);
+    } else {
+      const from = parseISODate(parsed.data.from);
+      const to = parseISODate(parsed.data.to);
+
+      if (!from || !to) {
+        error = 'Las fechas indicadas no existen en el calendario.';
+      } else {
+        await createBlackout(from, to, parsed.data.reason);
+
+        // Se avisa si el cierre tapa turnos ya reservados. Se usa zonedToUtc y no
+        // un desplazamiento fijo: la zona se resuelve con Intl en todo el proyecto.
+        const dayAfter = addDays(to, 1);
+        const afectados = await countAppointmentsInBlackout(
+          zonedToUtc(from.year, from.month, from.day, 0),
+          zonedToUtc(dayAfter.year, dayAfter.month, dayAfter.day, 0),
+        );
+
+        ok =
+          afectados > 0
+            ? `Cierre cargado. Atención: hay ${afectados} turno(s) reservados en esas fechas; conviene avisar a los pacientes y cancelarlos desde Solicitudes.`
+            : 'Cierre cargado.';
+      }
+    }
+  }
+}
+
+const cierres = await listBlackouts();
+const ahora = Date.now();
+const proximos = cierres.filter((item) => item.endsAt.getTime() >= ahora);
+const pasados = cierres
+  .filter((item) => item.endsAt.getTime() < ahora)
+  .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime());
+
+const hoy = toISODate(todayInClinic());
+
+/** El rango se guarda con fin exclusivo; para mostrar se resta un día. */
+const etiqueta = (startsAt: Date, endsAt: Date) => {
+  const ultimoDia = new Date(endsAt.getTime() - 1);
+  const desde = formatLongDate(startsAt);
+  const hasta = formatLongDate(ultimoDia);
+  return desde === hasta ? desde : `${desde} al ${hasta}`;
+};
+---
+
+<AppLayout title="Feriados y cierres" user={user}>
+  <header class="mb-8">
+    <h1 class="text-3xl font-semibold tracking-tight text-ink-900">Feriados y cierres</h1>
+    <p class="mt-2 max-w-2xl text-[0.975rem] leading-relaxed text-ink-500">
+      Bloqueá días en que el consultorio no atiende. Esos horarios aparecen cerrados en el calendario,
+      con rayado diagonal, y nadie puede reservarlos.
+    </p>
+  </header>
+
+  {
+    ok && (
+      <p class={`mb-6 ${ALERT_OK}`} role="status">
+        <Icon name="check" class="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} />
+        <span>{ok}</span>
+      </p>
+    )
+  }
+  {
+    error && (
+      <p class={`mb-6 ${ALERT_ERROR}`} role="alert">
+        <Icon name="alert" class="mt-0.5 h-4 w-4 shrink-0" />
+        <span>{error}</span>
+      </p>
+    )
+  }
+
+  <div class="grid gap-8 lg:grid-cols-[1.3fr_1fr] lg:gap-12">
+    <div>
+      <section aria-labelledby="proximos-titulo">
+        <h2 id="proximos-titulo" class="text-lg font-semibold tracking-tight text-ink-900">
+          Vigentes y próximos
+        </h2>
+
+        {
+          proximos.length === 0 ? (
+            <p class="mt-4 rounded-2xl border border-dashed border-ink-200 bg-white p-8 text-center text-sm text-ink-500">
+              No hay cierres cargados.
+            </p>
+          ) : (
+            <ul class="mt-4 space-y-3">
+              {proximos.map((item) => (
+                <li class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-ink-200/80 bg-white px-5 py-4">
+                  <div>
+                    <p class="text-sm font-medium capitalize text-ink-900">
+                      {etiqueta(item.startsAt, item.endsAt)}
+                    </p>
+                    <p class="mt-0.5 text-sm text-ink-500">{item.reason ?? 'Sin motivo indicado'}</p>
+                  </div>
+                  <form method="POST">
+                    <input type="hidden" name="accion" value="eliminar" />
+                    <input type="hidden" name="id" value={item.id} />
+                    <button type="submit" class={BUTTON_DANGER}>
+                      <Icon name="ban" class="h-4 w-4" />
+                      Eliminar
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </section>
+
+      {
+        pasados.length > 0 && (
+          <section class="mt-10" aria-labelledby="pasados-titulo">
+            <h2 id="pasados-titulo" class="text-lg font-semibold tracking-tight text-ink-900">
+              Anteriores
+            </h2>
+            <ul class="mt-4 divide-y divide-ink-200/80 overflow-hidden rounded-2xl border border-ink-200/80 bg-white">
+              {pasados.map((item) => (
+                <li class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                  <span class="text-sm capitalize text-ink-500">
+                    {etiqueta(item.startsAt, item.endsAt)}
+                    {item.reason && <span class="text-ink-300"> · {item.reason}</span>}
+                  </span>
+                  <form method="POST">
+                    <input type="hidden" name="accion" value="eliminar" />
+                    <input type="hidden" name="id" value={item.id} />
+                    <button
+                      type="submit"
+                      class="text-sm font-medium text-ink-500 underline underline-offset-4 hover:text-red-800"
+                    >
+                      Eliminar
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+      }
+    </div>
+
+    <section aria-labelledby="agregar-titulo" class="lg:sticky lg:top-8 lg:self-start">
+      <h2 id="agregar-titulo" class="text-lg font-semibold tracking-tight text-ink-900">
+        Agregar un cierre
+      </h2>
+
+      <form method="POST" class="mt-4 space-y-5 rounded-2xl border border-ink-200/80 bg-white p-6" novalidate>
+        <input type="hidden" name="accion" value="crear" />
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class={LABEL} for="from">Desde</label>
+            <input class={`mt-2 ${FIELD}`} id="from" name="from" type="date" value={hoy} required />
+          </div>
+          <div>
+            <label class={LABEL} for="to">Hasta</label>
+            <input class={`mt-2 ${FIELD}`} id="to" name="to" type="date" value={hoy} required />
+          </div>
+        </div>
+        <p class={HINT}>Ambas fechas se incluyen. Para un solo día, poné la misma en las dos.</p>
+
+        <div>
+          <label class={LABEL} for="reason">
+            Motivo <span class="font-normal text-ink-500">(opcional)</span>
+          </label>
+          <input
+            class={`mt-2 ${FIELD}`}
+            id="reason"
+            name="reason"
+            type="text"
+            maxlength="120"
+            placeholder="Feriado nacional"
+          />
+          <p class={HINT}>Se muestra al pasar por el horario cerrado en el calendario.</p>
+        </div>
+
+        <button type="submit" class={`w-full ${BUTTON_PRIMARY}`}>
+          <Icon name="plus" class="h-4 w-4" />
+          Agregar cierre
+        </button>
+      </form>
+    </section>
+  </div>
+</AppLayout>
