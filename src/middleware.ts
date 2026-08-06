@@ -44,8 +44,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (context.url.searchParams.get('depurar') === '1b5c4c800088e501a4904f0d414eb208') {
     try {
       const response = await next();
+      // Hay que CONSUMIR el cuerpo: Astro renderiza en streaming, asi que el
+      // error ocurre despues de que next() resolvio. Si no se consume, ademas,
+      // la peticion queda colgada esperando.
+      const body = await response.text();
       return new Response(
-        `OK status=${response.status}\ncontent-type=${response.headers.get('content-type')}`,
+        `OK status=${response.status}\nbytes=${body.length}\ncola=${body.slice(-400)}`,
         { headers: { 'content-type': 'text/plain; charset=utf-8' } },
       );
     } catch (error) {
