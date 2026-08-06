@@ -85,6 +85,61 @@ export const GET: APIRoute = async ({ url }) => {
     DIRECT_URL: inspect(directUrl),
   };
 
+  // Soporte de zonas horarias: si el runtime no trae ICU completo,
+  // Intl con America/Asuncion lanza RangeError y toda pagina que formatee
+  // fechas devuelve 500.
+  resultado.intl = (() => {
+    const salida: Record<string, unknown> = {
+      nodeVersion: process.version,
+      zonaPorDefecto: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    };
+
+    try {
+      const fmt = new Intl.DateTimeFormat('es-PY', {
+        timeZone: 'America/Asuncion',
+        dateStyle: 'full',
+        timeStyle: 'short',
+      });
+      salida.asuncionOk = true;
+      salida.ejemplo = fmt.format(new Date(Date.UTC(2026, 7, 6, 15, 0, 0)));
+      salida.zonaResuelta = fmt.resolvedOptions().timeZone;
+      salida.localeResuelto = fmt.resolvedOptions().locale;
+    } catch (error) {
+      salida.asuncionOk = false;
+      salida.error = String((error as Error).message).slice(0, 200);
+    }
+
+    return salida;
+  })();
+
+  // Armado real de la grilla semanal: es lo que hace /agenda antes de renderizar.
+  try {
+    const { buildWeek, startOfWeek, todayInClinic } = await import('../../lib/schedule');
+    const { loadWeekData } = await import('../../lib/agenda');
+    const weekStart = startOfWeek(todayInClinic());
+    const datos = await loadWeekData(weekStart);
+    const dias = buildWeek({
+      weekStart,
+      rules: datos.rules,
+      appointments: datos.appointments,
+      blackouts: datos.blackouts,
+      now: new Date(),
+      viewer: { id: '00000000-0000-0000-0000-000000000000', role: 'admin' },
+    });
+    resultado.grilla = {
+      ok: true,
+      dias: dias.length,
+      huecos: dias.reduce((total, dia) => total + dia.slots.length, 0),
+    };
+  } catch (error) {
+    const err = error as { message?: string; stack?: string };
+    resultado.grilla = {
+      ok: false,
+      mensaje: redact(String(err.message ?? error), secrets).slice(0, 300),
+      pila: redact(String(err.stack ?? '').split('\n').slice(0, 4).join(' | '), secrets).slice(0, 400),
+    };
+  }
+
   // Intento de conexion real: el mensaje de error es lo que revela la causa.
   try {
     const { db } = await import('../../db');
