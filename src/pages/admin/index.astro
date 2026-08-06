@@ -18,10 +18,11 @@ if (!user) return Astro.redirect('/ingresar', 303);
 // El middleware ya bloquea a los clientes; esta guarda es defensa en profundidad.
 if (user.role !== 'admin') return Astro.redirect('/agenda', 303);
 
-const [pending, confirmed] = await Promise.all([
-  listPendingAppointments(),
-  listUpcomingConfirmed(),
-]);
+// Secuenciales, no en paralelo: con una sola conexion y el pooler de Supabase
+// en modo transaction, varias consultas encoladas a la vez terminan canceladas
+// (57014). Ver la nota en loadWeekData.
+const pending = await listPendingAppointments();
+const confirmed = await listUpcomingConfirmed();
 
 const params = Astro.url.searchParams;
 const notices = {

@@ -15,29 +15,43 @@ function weekBounds(weekStart: CalendarDate) {
 export async function loadWeekData(weekStart: CalendarDate) {
   const { from, to } = weekBounds(weekStart);
 
-  const [rules, weekAppointments, weekBlackouts] = await Promise.all([
-    db.select().from(availabilityRules).orderBy(asc(availabilityRules.startMinute)),
+  /**
+   * Las tres consultas van SECUENCIALES, no con Promise.all.
+   *
+   * En produccion el pool es de una sola conexion, y el pooler de Supabase en
+   * modo transaction asigna un backend por transaccion: no tolera varias
+   * consultas encoladas en paralelo sobre la misma conexion. Lanzarlas juntas
+   * hacia que la peticion muriera con "canceling statement due to statement
+   * timeout" (57014) y toda la agenda devolviera 500 en produccion, mientras en
+   * desarrollo funcionaba porque ahi el pool es mas grande.
+   *
+   * Secuencial cuesta unos 350 ms contra Ohio, en lugar de ~120 ms, y no
+   * depende del tamano del pool ni del modo del pooler.
+   */
+  const rules = await db
+    .select()
+    .from(availabilityRules)
+    .orderBy(asc(availabilityRules.startMinute));
 
-    db
-      .select({
-        id: appointments.id,
-        userId: appointments.userId,
-        startsAt: appointments.startsAt,
-        status: appointments.status,
-        serviceName: services.name,
-        patientName: users.fullName,
-      })
-      .from(appointments)
-      .innerJoin(services, eq(appointments.serviceId, services.id))
-      .innerJoin(users, eq(appointments.userId, users.id))
-      .where(and(gte(appointments.startsAt, from), lt(appointments.startsAt, to))),
+  const weekAppointments = await db
+    .select({
+      id: appointments.id,
+      userId: appointments.userId,
+      startsAt: appointments.startsAt,
+      status: appointments.status,
+      serviceName: services.name,
+      patientName: users.fullName,
+    })
+    .from(appointments)
+    .innerJoin(services, eq(appointments.serviceId, services.id))
+    .innerJoin(users, eq(appointments.userId, users.id))
+    .where(and(gte(appointments.startsAt, from), lt(appointments.startsAt, to)));
 
-    // Un bloqueo cuenta si se solapa con la semana, no solo si empieza dentro.
-    db
-      .select()
-      .from(blackouts)
-      .where(and(lt(blackouts.startsAt, to), gte(blackouts.endsAt, from))),
-  ]);
+  // Un bloqueo cuenta si se solapa con la semana, no solo si empieza dentro.
+  const weekBlackouts = await db
+    .select()
+    .from(blackouts)
+    .where(and(lt(blackouts.startsAt, to), gte(blackouts.endsAt, from)));
 
   return { rules, appointments: weekAppointments, blackouts: weekBlackouts };
 }
