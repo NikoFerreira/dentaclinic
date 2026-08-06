@@ -105,6 +105,8 @@ class Client {
 // ---------------------------------------------------------------------------
 const sql = postgres(process.env.DIRECT_URL!, { max: 1, prepare: false, connect_timeout: 25 });
 
+await sql`delete from appointments where notes in ('Cargado por teléfono.', 'Intento de suplantación.')`;
+
 const borrados = await sql`
   delete from users where email in (${PACIENTE_A.email}, ${PACIENTE_B.email}) returning id
 `;
@@ -393,13 +395,25 @@ if (librosAdmin.length > 0) {
       `status=${cargado.status} location=${cargado.location}`,
     );
 
-    const cargadoBd = await sql<{ status: string; notes: string | null }[]>`
-      select status, notes from appointments where starts_at = ${new Date(startAdmin)}
+    /**
+     * Se filtra por la nota, no solo por el horario: en un mismo horario puede
+     * haber varios turnos (rechazados y cancelados no bloquean), y tomar el
+     * primero devolvia cualquiera de ellos.
+     */
+    const cargadoBd = await sql<{ status: string; email: string }[]>`
+      select a.status, u.email from appointments a
+      join users u on u.id = a.user_id
+      where a.starts_at = ${new Date(startAdmin)} and a.notes = 'Cargado por teléfono.'
     `;
     check(
       'queda como solicitud pendiente en la base',
-      cargadoBd[0]?.status === 'pending' && cargadoBd[0]?.notes === 'Cargado por teléfono.',
-      `${cargadoBd[0]?.status}`,
+      cargadoBd[0]?.status === 'pending',
+      `${cargadoBd.length} filas, estado=${cargadoBd[0]?.status}`,
+    );
+    check(
+      'y queda a nombre del paciente elegido, no del admin',
+      cargadoBd[0]?.email !== undefined && cargadoBd[0].email !== adminEmail,
+      String(cargadoBd[0]?.email),
     );
 
     const panelTrasCarga = await admin.get('/admin');
@@ -408,23 +422,33 @@ if (librosAdmin.length > 0) {
       panelTrasCarga.body.includes('Cargado por teléfono.'),
     );
 
-    // Un paciente no puede cargar turnos para otra persona.
-    const intentoAjeno = await ana.post('/agenda/reservar', {
+    /**
+     * Un paciente que envia `patientId` y `confirmar` a mano no debe conseguir
+     * ninguna de las dos cosas: el turno tiene que quedar a SU nombre y como
+     * pendiente. Ambos campos se ignoran salvo para administracion.
+     */
+    await ana.post('/agenda/reservar', {
       startsAt: startAdmin,
       serviceId: servicioAdmin,
       patientId: pacienteOpcion,
       confirmar: 'si',
-      notes: '',
+      notes: 'Intento de suplantación.',
     });
-    const deQuien = await sql<{ email: string }[]>`
-      select u.email from appointments a join users u on u.id = a.user_id
-      where a.starts_at = ${new Date(startAdmin)} and a.status = 'pending'
-      order by a.created_at desc limit 1
+
+    const suplantacion = await sql<{ status: string; email: string }[]>`
+      select a.status, u.email from appointments a
+      join users u on u.id = a.user_id
+      where a.notes = 'Intento de suplantación.'
     `;
     check(
-      'AUTORIZACIÓN: un paciente no puede cargar turnos a nombre de otro',
-      intentoAjeno.status !== 500 && deQuien[0]?.email !== undefined,
-      `status=${intentoAjeno.status}`,
+      'AUTORIZACIÓN: el paciente no puede cargar el turno a nombre de otro',
+      suplantacion[0]?.email === PACIENTE_A.email,
+      `quedó a nombre de ${String(suplantacion[0]?.email)}`,
+    );
+    check(
+      'AUTORIZACIÓN: el paciente no puede autoconfirmarse el turno',
+      suplantacion[0]?.status === 'pending',
+      `estado=${String(suplantacion[0]?.status)}`,
     );
   }
 }
