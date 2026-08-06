@@ -36,44 +36,5 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return context.redirect('/agenda');
   }
 
-  // ------------------------------------------------------------------
-  // CAPTURA TEMPORAL DE ERRORES. Eliminar junto con /api/diagnostico.
-  // Con ?depurar=<token> devuelve la excepcion en texto plano, porque los
-  // logs de Vercel no son accesibles desde el entorno de desarrollo.
-  // ------------------------------------------------------------------
-  if (context.url.searchParams.get('depurar') === '1b5c4c800088e501a4904f0d414eb208') {
-    try {
-      const response = await next();
-      // Hay que CONSUMIR el cuerpo: Astro renderiza en streaming, asi que el
-      // error ocurre despues de que next() resolvio. Si no se consume, ademas,
-      // la peticion queda colgada esperando.
-      const body = await response.text();
-      return new Response(
-        `OK status=${response.status}\nbytes=${body.length}\ncola=${body.slice(-400)}`,
-        { headers: { 'content-type': 'text/plain; charset=utf-8' } },
-      );
-    } catch (error) {
-      const err = error as Error;
-      let texto = `ERROR: ${err.name}: ${err.message}\n\n${err.stack ?? ''}`;
-      if (err.cause) texto += `\n\nCAUSA: ${String((err.cause as Error).message ?? err.cause)}`;
-
-      // Se oculta la contrasena por si apareciera en la traza.
-      for (const url of [process.env.DATABASE_URL, process.env.DIRECT_URL]) {
-        if (!url) continue;
-        try {
-          const password = new URL(url).password;
-          if (password.length > 3) texto = texto.split(password).join('«oculto»');
-        } catch {
-          // URL invalida
-        }
-      }
-
-      return new Response(texto.slice(0, 3000), {
-        status: 500,
-        headers: { 'content-type': 'text/plain; charset=utf-8' },
-      });
-    }
-  }
-
   return next();
 });
