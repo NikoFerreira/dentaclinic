@@ -231,12 +231,13 @@ export function dateLabels(date: CalendarDate) {
 
 export type SlotState = 'free' | 'pending' | 'confirmed' | 'blocked' | 'past';
 
-/** Estados que ocupan el horario e impiden una nueva reserva. */
-const OCCUPYING: ReadonlySet<AppointmentStatus> = new Set([
-  'pending',
-  'confirmed',
-  'completed',
-]);
+/**
+ * Estados que BLOQUEAN el horario: nadie mas puede solicitarlo.
+ *
+ * Los pendientes no estan: son solicitudes, no reservas. Varios pacientes
+ * pueden pedir el mismo horario y administracion decide cual confirma.
+ */
+const BLOCKING: ReadonlySet<AppointmentStatus> = new Set(['confirmed', 'completed']);
 
 export interface WeekAppointment {
   id: string;
@@ -266,7 +267,17 @@ export interface Slot {
   startsAt: Date;
   endsAt: Date;
   state: SlotState;
-  appointment: SlotAppointment | null;
+  /**
+   * Si el espectador puede solicitar este horario. Un horario con solicitudes
+   * pendientes sigue siendo solicitable: solo un turno confirmado lo cierra.
+   */
+  bookable: boolean;
+  /** Turno confirmado que ocupa el horario, si hay. */
+  confirmed: SlotAppointment | null;
+  /** Solicitudes pendientes compitiendo por el horario. */
+  pending: SlotAppointment[];
+  /** Si el espectador ya tiene un turno o solicitud en este horario. */
+  isOwn: boolean;
   blockedReason: string | null;
 }
 
@@ -297,12 +308,33 @@ function overlapsBlackout(start: Date, end: Date, blackouts: Blackout[]): Blacko
 export function buildWeek(options: BuildWeekOptions): DayColumn[] {
   const { weekStart, rules, appointments, blackouts, now, viewer } = options;
 
-  const occupied = new Map<number, WeekAppointment>();
+  /** Turno confirmado por horario: como maximo uno, lo garantiza la base. */
+  const confirmedBySlot = new Map<number, WeekAppointment>();
+  /** Solicitudes pendientes por horario: pueden ser varias compitiendo. */
+  const pendingBySlot = new Map<number, WeekAppointment[]>();
+
   for (const appointment of appointments) {
-    if (OCCUPYING.has(appointment.status)) {
-      occupied.set(appointment.startsAt.getTime(), appointment);
+    const key = appointment.startsAt.getTime();
+    if (BLOCKING.has(appointment.status)) {
+      confirmedBySlot.set(key, appointment);
+    } else if (appointment.status === 'pending') {
+      const list = pendingBySlot.get(key) ?? [];
+      list.push(appointment);
+      pendingBySlot.set(key, list);
     }
   }
+
+  /** Privacidad: un paciente nunca ve de quien es un turno ajeno. */
+  const toSlotAppointment = (appointment: WeekAppointment): SlotAppointment => {
+    const isOwn = appointment.userId === viewer.id;
+    return {
+      id: appointment.id,
+      status: appointment.status,
+      serviceName: appointment.serviceName,
+      patientName: viewer.role === 'admin' || isOwn ? appointment.patientName : null,
+      isOwn,
+    };
+  };
 
   const today = todayInClinic(now);
   const days: DayColumn[] = [];
@@ -324,45 +356,42 @@ export function buildWeek(options: BuildWeekOptions): DayColumn[] {
       ) {
         const startsAt = zonedToUtc(date.year, date.month, date.day, minute);
         const endsAt = new Date(startsAt.getTime() + rule.slotMinutes * 60000);
-        const appointment = occupied.get(startsAt.getTime());
+        const key = startsAt.getTime();
 
-        if (appointment) {
-          const isOwn = appointment.userId === viewer.id;
-          slots.push({
-            startsAt,
-            endsAt,
-            state: appointment.status === 'pending' ? 'pending' : 'confirmed',
-            appointment: {
-              id: appointment.id,
-              status: appointment.status,
-              serviceName: appointment.serviceName,
-              // Privacidad: un paciente nunca ve de quien es un turno ajeno.
-              patientName: viewer.role === 'admin' || isOwn ? appointment.patientName : null,
-              isOwn,
-            },
-            blockedReason: null,
-          });
-          continue;
-        }
+        const confirmedRaw = confirmedBySlot.get(key);
+        const pendingRaw = pendingBySlot.get(key) ?? [];
 
+        const confirmed = confirmedRaw ? toSlotAppointment(confirmedRaw) : null;
+        const pending = pendingRaw.map(toSlotAppointment);
+        const isOwn = Boolean(confirmed?.isOwn) || pending.some((item) => item.isOwn);
+
+        const isPast = startsAt.getTime() <= now.getTime();
         const blackout = overlapsBlackout(startsAt, endsAt, blackouts);
-        if (blackout) {
-          slots.push({
-            startsAt,
-            endsAt,
-            state: 'blocked',
-            appointment: null,
-            blockedReason: blackout.reason,
-          });
-          continue;
-        }
+
+        /**
+         * Prioridad de estados: confirmado > cerrado > pasado > pendiente > libre.
+         *
+         * Pendiente va DESPUES de pasado y cerrado a proposito: un horario que
+         * ya paso o esta bloqueado no se puede solicitar aunque haya
+         * solicitudes vivas encima.
+         */
+        let state: SlotState;
+        if (confirmed) state = 'confirmed';
+        else if (blackout) state = 'blocked';
+        else if (isPast) state = 'past';
+        else if (pending.length > 0) state = 'pending';
+        else state = 'free';
 
         slots.push({
           startsAt,
           endsAt,
-          state: startsAt.getTime() <= now.getTime() ? 'past' : 'free',
-          appointment: null,
-          blockedReason: null,
+          state,
+          // Solo un confirmado, un bloqueo o el paso del tiempo cierran el horario.
+          bookable: !confirmed && !blackout && !isPast,
+          confirmed,
+          pending,
+          isOwn,
+          blockedReason: blackout?.reason ?? null,
         });
       }
     }

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { db } from '../../../db';
 import { appointments, type AppointmentStatus } from '../../../db/schema';
 import { safeRedirect } from '../../../lib/http';
@@ -84,8 +84,36 @@ export const POST: APIRoute = async ({ params, request, locals, redirect }) => {
     .set({ status: NEXT_STATUS[accion], updatedAt: new Date() })
     .where(eq(appointments.id, id));
 
-  const flag =
+  /**
+   * Al confirmar, las demas solicitudes por el MISMO horario quedan rechazadas.
+   *
+   * Varias personas pueden pedir el mismo horario (un pendiente no bloquea),
+   * pero solo una puede quedar confirmada. Sin esto, las otras seguirian
+   * figurando como pendientes para siempre, esperando una respuesta que ya se
+   * dio a otro.
+   */
+  let desplazadas = 0;
+  if (accion === 'confirmar') {
+    const rechazadas = await db
+      .update(appointments)
+      .set({ status: 'rejected', updatedAt: new Date() })
+      .where(
+        and(
+          eq(appointments.startsAt, appointment.startsAt),
+          eq(appointments.status, 'pending'),
+          ne(appointments.id, id),
+        ),
+      )
+      .returning({ id: appointments.id });
+
+    desplazadas = rechazadas.length;
+  }
+
+  let flag =
     accion === 'cancelar' ? 'cancelado=1' : accion === 'confirmar' ? 'confirmado=1' : 'actualizado=1';
+
+  // Se informa cuántas solicitudes quedaron rechazadas por la confirmación.
+  if (desplazadas > 0) flag += `&desplazadas=${desplazadas}`;
 
   return redirect(`${back}${back.includes('?') ? '&' : '?'}${flag}`, 303);
 };

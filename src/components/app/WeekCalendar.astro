@@ -114,7 +114,17 @@ const legendStates = ['free', 'pending', 'confirmed', 'blocked', 'past'] as cons
               {day.slots.map((slot) => {
                 const meta = SLOT_META[slot.state];
                 const time = formatTime(slot.startsAt);
-                const isLink = bookable && slot.state === 'free';
+
+                /**
+                 * Un horario con solicitudes pendientes SIGUE siendo solicitable:
+                 * solo un turno confirmado, un cierre o el paso del tiempo lo
+                 * cierran. Eso lo decide `slot.bookable`.
+                 */
+                const isLink = bookable && slot.bookable;
+
+                // Quién ocupa el horario, según lo que el espectador puede ver.
+                const ocupante = slot.confirmed?.patientName ?? null;
+                const servicio = slot.confirmed?.serviceName ?? null;
 
                 const inner = (
                   <>
@@ -122,19 +132,28 @@ const legendStates = ['free', 'pending', 'confirmed', 'blocked', 'past'] as cons
                       <span class="font-medium tabular-nums">{time}</span>
                       <Icon name={meta.icon} class="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
                     </span>
+
                     <span class="mt-0.5 block truncate text-[0.7rem] leading-tight opacity-90">
-                      {slot.appointment
-                        ? (slot.appointment.patientName ?? meta.label)
-                        : meta.label}
+                      {ocupante ?? meta.label}
                     </span>
-                    {slot.appointment?.patientName && (
+
+                    {servicio && (
                       <span class="block truncate text-[0.65rem] leading-tight opacity-75">
-                        {slot.appointment.serviceName}
+                        {servicio}
                       </span>
                     )}
-                    {slot.appointment?.isOwn && (
+
+                    {slot.pending.length > 0 && (
+                      <span class="mt-0.5 block text-[0.65rem] leading-tight opacity-90">
+                        {slot.pending.length === 1
+                          ? '1 solicitud'
+                          : `${slot.pending.length} solicitudes`}
+                      </span>
+                    )}
+
+                    {slot.isOwn && (
                       <span class="mt-1 inline-block rounded bg-mint-100 px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-mint-600">
-                        Tu turno
+                        {slot.confirmed?.isOwn ? 'Tu turno' : 'Tu solicitud'}
                       </span>
                     )}
                   </>
@@ -148,7 +167,9 @@ const legendStates = ['free', 'pending', 'confirmed', 'blocked', 'past'] as cons
                         class:list={['block rounded-xl border px-2.5 py-2 text-xs transition-colors', meta.classes]}
                       >
                         <span class="sr-only">
-                          Reservar {day.labels.long} a las {time}.
+                          {slot.pending.length > 0
+                            ? `Solicitar ${day.labels.long} a las ${time}. Ya hay ${slot.pending.length} solicitud(es) para este horario.`
+                            : `Solicitar ${day.labels.long} a las ${time}.`}
                         </span>
                         {inner}
                       </a>

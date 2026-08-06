@@ -29,8 +29,12 @@ const days = buildWeek({
 
 const isAdmin = user.role === 'admin';
 const cancelled = Astro.url.searchParams.get('cancelado') === '1';
-const freeCount = days.reduce(
-  (total, day) => total + day.slots.filter((slot) => slot.state === 'free').length,
+
+// Horarios que todavia se pueden solicitar: libres y los que solo tienen
+// solicitudes pendientes. Solo un confirmado, un cierre o el paso del tiempo
+// cierran un horario.
+const bookableCount = days.reduce(
+  (total, day) => total + day.slots.filter((slot) => slot.bookable).length,
   0,
 );
 ---
@@ -43,8 +47,8 @@ const freeCount = days.reduce(
     <p class="mt-2 max-w-2xl text-[0.975rem] leading-relaxed text-ink-500">
       {
         isAdmin
-          ? 'Vista completa de la semana. Para confirmar o rechazar solicitudes, entrá a Solicitudes.'
-          : 'Elegí un horario libre y enviá tu solicitud. El consultorio la confirma y te avisa.'
+          ? 'Hacé clic en cualquier horario disponible para cargar un turno en nombre de un paciente. Los que ya tienen solicitudes también aceptan más.'
+          : 'Hacé clic en un horario disponible para enviar tu solicitud. El consultorio la confirma y te avisa.'
       }
     </p>
   </header>
@@ -59,15 +63,21 @@ const freeCount = days.reduce(
   }
 
   {
-    !isAdmin && freeCount === 0 && (
+    bookableCount === 0 && (
       <p class="mb-6 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-relaxed text-amber-800">
         <Icon name="alert" class="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          No quedan horarios libres esta semana. Probá con la semana siguiente usando las flechas.
+          No quedan horarios disponibles esta semana. Probá con la semana siguiente usando las
+          flechas.
         </span>
       </p>
     )
   }
 
-  <WeekCalendar days={days} weekStart={weekStart} baseHref="/agenda" bookable={!isAdmin} />
+  <!--
+    Administración también puede cargar turnos: hasta ahora su calendario era de
+    solo lectura, así que el consultorio no tenía forma de dar de alta un turno
+    por teléfono.
+  -->
+  <WeekCalendar days={days} weekStart={weekStart} baseHref="/agenda" bookable={true} />
 </AppLayout>

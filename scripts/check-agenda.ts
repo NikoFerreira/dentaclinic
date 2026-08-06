@@ -235,21 +235,42 @@ const book = (userId: string, startsAt: Date, status: 'pending' | 'confirmed' = 
     .returning({ id: appointments.id });
 
 const [anaAppointment] = await book(ana.id, slotA);
-check('Ana reserva un horario libre', Boolean(anaAppointment.id));
+check('Ana solicita un horario libre', Boolean(anaAppointment.id));
 
-let doubleBookingRejected = false;
+/**
+ * Varias SOLICITUDES por el mismo horario estan permitidas a proposito: un
+ * pendiente es un pedido, no una reserva. Si bloqueara, el primero en pedir se
+ * quedaria el horario aunque despues no le sirviera.
+ */
+let segundaSolicitud = false;
 try {
   await book(luis.id, slotA);
-} catch (error) {
-  doubleBookingRejected = isUniqueViolation(error);
+  segundaSolicitud = true;
+} catch {
+  segundaSolicitud = false;
 }
-check('la BASE impide reservar el mismo horario dos veces', doubleBookingRejected);
+check('la base ADMITE una segunda solicitud para el mismo horario', segundaSolicitud);
 
-// Dos peticiones realmente simultaneas: solo una debe sobrevivir.
+// Pero un CONFIRMADO si cierra el horario.
+const slotConfirmado = nextSlot(5);
+await book(ana.id, slotConfirmado, 'confirmed');
+
+let segundoConfirmadoRechazado = false;
+try {
+  await book(luis.id, slotConfirmado, 'confirmed');
+} catch (error) {
+  segundoConfirmadoRechazado = isUniqueViolation(error);
+}
+check('la BASE impide DOS turnos confirmados en el mismo horario', segundoConfirmadoRechazado);
+
+// Dos confirmaciones realmente simultaneas: solo una debe sobrevivir.
 const raceSlot = nextSlot(2);
-const raceResults = await Promise.allSettled([book(ana.id, raceSlot), book(luis.id, raceSlot)]);
+const raceResults = await Promise.allSettled([
+  book(ana.id, raceSlot, 'confirmed'),
+  book(luis.id, raceSlot, 'confirmed'),
+]);
 const fulfilled = raceResults.filter((r) => r.status === 'fulfilled').length;
-check('ante dos reservas simultáneas solo una gana', fulfilled === 1, `${fulfilled} exitosas`);
+check('ante dos confirmaciones simultáneas solo una gana', fulfilled === 1, `${fulfilled} exitosas`);
 
 // ---------------------------------------------------------------------------
 // 5. Transiciones de estado
@@ -336,13 +357,14 @@ if (!adminSlotA || !luisSlotA) {
   check('el turno de Ana aparece en la semana en curso', false, 'cae en otra semana; se omite');
 } else {
   check('el turno confirmado se pinta como confirmado', adminSlotA.state === 'confirmed', adminSlotA.state);
-  check('administración ve el nombre del paciente', adminSlotA.appointment?.patientName === 'Ana Giménez');
+  check('un confirmado CIERRA el horario', adminSlotA.bookable === false);
+  check('administración ve el nombre del paciente', adminSlotA.confirmed?.patientName === 'Ana Giménez');
   check(
     'PRIVACIDAD: otro paciente ve el horario ocupado pero sin el nombre',
-    luisSlotA.state === 'confirmed' && luisSlotA.appointment?.patientName === null,
-    `estado=${luisSlotA.state} nombre=${String(luisSlotA.appointment?.patientName)}`,
+    luisSlotA.state === 'confirmed' && luisSlotA.confirmed?.patientName === null,
+    `estado=${luisSlotA.state} nombre=${String(luisSlotA.confirmed?.patientName)}`,
   );
-  check('el turno ajeno no se marca como propio', luisSlotA.appointment?.isOwn === false);
+  check('el turno ajeno no se marca como propio', luisSlotA.confirmed?.isOwn === false);
 }
 
 // Bloqueo por feriado

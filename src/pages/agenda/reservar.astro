@@ -18,16 +18,21 @@ import {
   listActiveServices,
   listAvailabilityRules,
   listBlackoutsOverlapping,
+  listPatients,
+  listPendingAtSlot,
 } from '../../lib/agenda';
 import { isUniqueViolation } from '../../lib/http';
-import { bookingSchema, firstIssue } from '../../lib/validation';
+import { adminBookingSchema, bookingSchema, firstIssue } from '../../lib/validation';
 import { formatFull, formatTime, isValidSlotStart, toISODate, todayInClinic } from '../../lib/schedule';
 
 const { user } = Astro.locals;
 if (!user) return Astro.redirect('/ingresar', 303);
 
-/** Un administrador gestiona desde el panel, no reserva para sí mismo. */
-if (user.role === 'admin') return Astro.redirect('/admin', 303);
+/**
+ * Administración también carga turnos desde acá, en nombre de un paciente:
+ * el consultorio necesita poder dar de alta un turno que llega por teléfono.
+ */
+const isAdmin = user.role === 'admin';
 
 const rawStart =
   Astro.request.method === 'POST' ? null : Astro.url.searchParams.get('inicio');
@@ -37,15 +42,21 @@ let startsAt: Date | null = null;
 let slotMinutes = 30;
 let notes = '';
 let selectedServiceId = '';
+let selectedPatientId = '';
+let confirmarDirecto = false;
 
 const services = await listActiveServices();
 const rules = await listAvailabilityRules();
+const patients = isAdmin ? await listPatients() : [];
 
 /**
  * Valida un instante recibido del cliente. No basta con que sea una fecha:
- * tiene que caer exactamente en un hueco de la grilla, estar en el futuro, no
- * pisar un bloqueo y no estar ya ocupado. Si no, alguien podría reservar a
- * cualquier hora manipulando el parámetro.
+ * tiene que caer exactamente en un hueco de la grilla, estar en el futuro y no
+ * pisar un cierre. Si no, alguien podría reservar a cualquier hora manipulando
+ * el parámetro.
+ *
+ * Que haya solicitudes pendientes NO lo invalida: un pendiente es una
+ * solicitud, no una reserva. Solo un turno confirmado cierra el horario.
  */
 async function resolveSlot(value: string): Promise<{ startsAt: Date; slotMinutes: number } | string> {
   const parsed = new Date(value);
@@ -62,7 +73,7 @@ async function resolveSlot(value: string): Promise<{ startsAt: Date; slotMinutes
     return 'El consultorio está cerrado en ese horario.';
   }
 
-  if (await isSlotTaken(parsed)) return 'Ese horario acaba de ser reservado. Elegí otro.';
+  if (await isSlotTaken(parsed)) return 'Ese horario ya tiene un turno confirmado. Elegí otro.';
 
   return { startsAt: parsed, slotMinutes: rule.slotMinutes };
 }
@@ -71,43 +82,78 @@ if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
   notes = String(form.get('notes') ?? '');
   selectedServiceId = String(form.get('serviceId') ?? '');
+  selectedPatientId = String(form.get('patientId') ?? '');
+  confirmarDirecto = String(form.get('confirmar') ?? 'no') === 'si';
 
-  const parsed = bookingSchema.safeParse({
+  const base = {
     startsAt: String(form.get('startsAt') ?? ''),
     serviceId: selectedServiceId,
     notes,
-  });
+  };
+
+  const parsed = isAdmin
+    ? adminBookingSchema.safeParse({
+        ...base,
+        patientId: selectedPatientId,
+        confirmar: confirmarDirecto ? 'si' : 'no',
+      })
+    : bookingSchema.safeParse(base);
 
   if (!parsed.success) {
     error = firstIssue(parsed.error);
   } else if (!services.some((service) => service.id === parsed.data.serviceId)) {
     error = 'Elegí una especialidad válida.';
   } else {
-    const resolved = await resolveSlot(parsed.data.startsAt);
+    /**
+     * De quién es el turno. Para un paciente, de sí mismo, sin excepción. Para
+     * administración, del paciente elegido, comprobado contra la lista real:
+     * un UUID válido no garantiza que exista ni que sea un cliente.
+     */
+    let ownerId = user.id;
 
-    if (typeof resolved === 'string') {
-      error = resolved;
-    } else {
-      startsAt = resolved.startsAt;
-      slotMinutes = resolved.slotMinutes;
+    if (isAdmin) {
+      // `patientId` solo existe en el esquema de administración; el union de
+      // ambos esquemas no lo declara, de ahí el acceso explícito.
+      const chosenId = 'patientId' in parsed.data ? parsed.data.patientId : '';
+      const chosen = patients.find((p) => p.id === chosenId);
+      if (!chosen) {
+        error = 'Elegí un paciente de la lista.';
+      } else {
+        ownerId = chosen.id;
+      }
+    }
 
-      try {
-        await db.insert(appointments).values({
-          userId: user.id,
-          serviceId: parsed.data.serviceId,
-          startsAt: resolved.startsAt,
-          endsAt: new Date(resolved.startsAt.getTime() + resolved.slotMinutes * 60000),
-          status: 'pending',
-          notes: parsed.data.notes,
-        });
+    if (!error) {
+      const resolved = await resolveSlot(parsed.data.startsAt);
 
-        return Astro.redirect('/mis-turnos?solicitado=1', 303);
-      } catch (cause) {
-        // El índice único parcial rechazó la reserva: alguien ganó la carrera.
-        if (isUniqueViolation(cause)) {
-          error = 'Ese horario acaba de ser reservado por otra persona. Elegí otro.';
-        } else {
-          throw cause;
+      if (typeof resolved === 'string') {
+        error = resolved;
+      } else {
+        startsAt = resolved.startsAt;
+        slotMinutes = resolved.slotMinutes;
+
+        try {
+          await db.insert(appointments).values({
+            userId: ownerId,
+            serviceId: parsed.data.serviceId,
+            startsAt: resolved.startsAt,
+            endsAt: new Date(resolved.startsAt.getTime() + resolved.slotMinutes * 60000),
+            // Solo administración puede confirmar de una; un paciente solicita.
+            status: isAdmin && confirmarDirecto ? 'confirmed' : 'pending',
+            notes: parsed.data.notes,
+          });
+
+          return Astro.redirect(
+            isAdmin ? '/admin?cargado=1' : '/mis-turnos?solicitado=1',
+            303,
+          );
+        } catch (cause) {
+          // El índice único parcial rechazó el turno: ya hay uno confirmado.
+          if (isUniqueViolation(cause)) {
+            error = 'Ese horario acaba de recibir un turno confirmado. Elegí otro.';
+          } else {
+            throw cause;
+          }
         }
       }
     }
@@ -128,6 +174,14 @@ const backHref = startsAt
   ? `/agenda?semana=${toISODate(todayInClinic(startsAt))}`
   : '/agenda';
 const endsAt = startsAt ? new Date(startsAt.getTime() + slotMinutes * 60000) : null;
+
+/**
+ * Solicitudes que ya compiten por este horario. Se muestran para que quien
+ * solicita sepa que no es el único, y para que administración vea a quién más
+ * dejaría afuera al confirmar.
+ */
+const competencia = startsAt ? await listPendingAtSlot(startsAt) : [];
+const propias = competencia.filter((item) => item.userId === user.id).length;
 ---
 
 <AppLayout title="Confirmar turno" user={user}>
@@ -166,6 +220,52 @@ const endsAt = startsAt ? new Date(startsAt.getTime() + slotMinutes * 60000) : n
             </p>
           </div>
 
+          {competencia.length > 0 && (
+            <div class="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm leading-relaxed text-amber-800">
+              <p class="font-semibold">
+                {competencia.length === 1
+                  ? 'Ya hay 1 solicitud para este horario'
+                  : `Ya hay ${competencia.length} solicitudes para este horario`}
+                {propias > 0 && !isAdmin && ' (incluida la tuya)'}
+              </p>
+              {isAdmin ? (
+                <ul class="mt-2 space-y-1">
+                  {competencia.map((item) => (
+                    <li>
+                      {item.patientName} <span class="opacity-75">· {item.serviceName}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p class="mt-1">
+                  El horario sigue disponible: podés solicitarlo igual. El consultorio confirma una
+                  sola y avisa al resto.
+                </p>
+              )}
+            </div>
+          )}
+
+          {isAdmin && (
+            <div>
+              <label class={LABEL} for="patientId">Paciente</label>
+              <select class={`mt-2 ${FIELD}`} id="patientId" name="patientId" required>
+                <option value="" disabled selected={!selectedPatientId}>
+                  Seleccioná un paciente
+                </option>
+                {patients.map((patient) => (
+                  <option value={patient.id} selected={selectedPatientId === patient.id}>
+                    {patient.fullName} — {patient.phone}
+                  </option>
+                ))}
+              </select>
+              <p class={HINT}>
+                {patients.length === 0
+                  ? 'Todavía no hay pacientes registrados. El paciente tiene que crear su cuenta primero.'
+                  : 'El turno queda asociado a esa cuenta, así el paciente lo ve en «Mis turnos».'}
+              </p>
+            </div>
+          )}
+
           <div>
             <label class={LABEL} for="serviceId">Especialidad</label>
             <select class={`mt-2 ${FIELD}`} id="serviceId" name="serviceId" required>
@@ -179,6 +279,23 @@ const endsAt = startsAt ? new Date(startsAt.getTime() + slotMinutes * 60000) : n
               ))}
             </select>
           </div>
+
+          {isAdmin && (
+            <div>
+              <label class={LABEL} for="confirmar">Estado del turno</label>
+              <select class={`mt-2 ${FIELD}`} id="confirmar" name="confirmar">
+                <option value="no" selected={!confirmarDirecto}>
+                  Dejar como solicitud pendiente
+                </option>
+                <option value="si" selected={confirmarDirecto}>
+                  Confirmar directamente
+                </option>
+              </select>
+              <p class={HINT}>
+                Confirmar directamente cierra el horario y rechaza las demás solicitudes.
+              </p>
+            </div>
+          )}
 
           <div>
             <label class={LABEL} for="notes">
@@ -195,14 +312,17 @@ const endsAt = startsAt ? new Date(startsAt.getTime() + slotMinutes * 60000) : n
           <div class="flex flex-col gap-3 sm:flex-row">
             <button type="submit" class={`flex-1 ${BUTTON_PRIMARY}`}>
               <Icon name="calendar" class="h-4 w-4" />
-              Solicitar este turno
+              {isAdmin ? 'Cargar el turno' : 'Solicitar este turno'}
             </button>
             <a href={backHref} class={BUTTON_SECONDARY}>Elegir otro horario</a>
           </div>
 
           <p class="text-xs leading-relaxed text-ink-500">
-            La solicitud queda pendiente hasta que el consultorio la confirme. Vas a poder seguir su
-            estado en «Mis turnos».
+            {
+              isAdmin
+                ? 'Si lo dejás pendiente, aparece en Solicitudes para confirmarlo después.'
+                : 'La solicitud queda pendiente hasta que el consultorio la confirme. Vas a poder seguir su estado en «Mis turnos».'
+            }
           </p>
         </form>
       ) : (

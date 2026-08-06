@@ -112,20 +112,26 @@ check('sábado: 5 huecos', week[5].slots.length, 5);
 
 const monday = week[0].slots;
 check('08:00 del lunes ya pasó', monday[0].state, 'past');
+check('un horario pasado no es solicitable', monday[0].bookable, false);
 check('09:00 del lunes ya pasó', monday[1].state, 'past');
 check('14:00 sigue libre', monday[4].state, 'free');
+check('un hueco libre es solicitable', monday[4].bookable, true);
 check('15:00 está confirmado', monday[5].state, 'confirmed');
+check('un confirmado CIERRA el horario', monday[5].bookable, false);
 check('16:00 está pendiente', monday[6].state, 'pending');
+check('un pendiente NO cierra el horario: sigue solicitable', monday[6].bookable, true);
+check('el pendiente figura en la lista de solicitudes', monday[6].pending.length, 1);
 check('17:00 cancelado vuelve a libre', monday[7].state, 'free');
 
-check('turno propio se marca como propio', monday[5].appointment?.isOwn, true);
-check('ve el nombre en su propio turno', monday[5].appointment?.patientName, 'Ana Giménez');
+check('turno propio se marca como propio', monday[5].confirmed?.isOwn, true);
+check('ve el nombre en su propio turno', monday[5].confirmed?.patientName, 'Ana Giménez');
 // Privacidad: el turno de otro paciente no debe revelar su identidad.
-check('turno ajeno oculta el nombre', monday[6].appointment?.patientName, null);
-check('turno ajeno no se marca como propio', monday[6].appointment?.isOwn, false);
+check('solicitud ajena oculta el nombre', monday[6].pending[0]?.patientName, null);
+check('solicitud ajena no se marca como propia', monday[6].pending[0]?.isOwn, false);
 
 check('sábado bloqueado por feriado', week[5].slots[0].state, 'blocked');
 check('motivo del bloqueo', week[5].slots[0].blockedReason, 'Feriado');
+check('un horario cerrado no es solicitable', week[5].slots[0].bookable, false);
 
 // Un administrador sí ve los nombres de todos.
 const adminWeek = buildWeek({
@@ -145,7 +151,7 @@ const adminWeek = buildWeek({
   now,
   viewer: { id: 'admin-1', role: 'admin' },
 });
-check('el admin ve el nombre del paciente', adminWeek[0].slots[6].appointment?.patientName, 'Luis Rojas');
+check('el admin ve el nombre del paciente', adminWeek[0].slots[6].pending[0]?.patientName, 'Luis Rojas');
 
 // --- Validacion de huecos (defensa contra parámetros manipulados) ----------
 check('acepta un inicio válido', isValidSlotStart(zonedToUtc(2026, 8, 3, 8 * 60), rules)?.id, 1);

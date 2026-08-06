@@ -207,35 +207,51 @@ const estadoBd = await sql`
 check('en la base figura como pending', estadoBd[0]?.status === 'pending', String(estadoBd[0]?.status));
 
 // ---------------------------------------------------------------------------
-console.log('\n4. El horario queda ocupado');
+console.log('\n4. Varias solicitudes pueden competir por el horario');
 
 const agendaAna2 = await ana.get('/agenda');
-check('Ana ve su turno marcado como propio', agendaAna2.body.includes('Tu turno'));
+check('Ana ve su solicitud marcada como propia', /Tu solicitud|Tu turno/.test(agendaAna2.body));
 check('el hueco aparece como pendiente', agendaAna2.body.includes('Pendiente'));
+check('y muestra el conteo de solicitudes', /1 solicitud/.test(agendaAna2.body));
+
+/**
+ * Un pendiente NO cierra el horario: sigue siendo solicitable. Antes lo
+ * bloqueaba, y el primero en pedir se quedaba el horario aunque despues no le
+ * sirviera.
+ */
 check(
-  'el hueco reservado ya no es un enlace para reservar',
-  !agendaAna2.body.includes(`/agenda/reservar?inicio=${libres[0]}`),
+  'el horario con solicitudes SIGUE siendo un enlace para pedirlo',
+  agendaAna2.body.includes(`/agenda/reservar?inicio=${libres[0]}`),
 );
 
-// PRIVACIDAD: Luis debe ver el horario ocupado, pero no de quien es.
+// PRIVACIDAD: Luis ve que hay solicitudes, pero no de quien son.
 const agendaLuis = await luis.get('/agenda');
 check(
-  'PRIVACIDAD: Luis no ve el nombre de Ana en el turno ajeno',
+  'PRIVACIDAD: Luis no ve el nombre de Ana en la solicitud ajena',
   !agendaLuis.body.includes('Ana Giménez'),
 );
-check('Luis tampoco ve ese hueco como reservable', !agendaLuis.body.includes(`inicio=${libres[0]}`));
+check('Luis también puede solicitar ese horario', agendaLuis.body.includes(`inicio=${libres[0]}`));
 
-// Doble reserva del mismo horario
-const choque = await luis.post('/agenda/reservar', {
+// Segunda solicitud para el MISMO horario: debe aceptarse.
+const segunda = await luis.post('/agenda/reservar', {
   startsAt,
   serviceId: servicioId,
-  notes: '',
+  notes: 'Yo también quiero ese horario.',
 });
 check(
-  'reservar un horario ya tomado muestra el mensaje y NO un 500',
-  choque.status === 200 && /acaba de ser reservado/i.test(choque.body),
-  `status=${choque.status}`,
+  'Luis solicita el mismo horario y se acepta',
+  segunda.status === 303 && segunda.location === '/mis-turnos?solicitado=1',
+  `status=${segunda.status} location=${segunda.location}`,
 );
+
+const compiten = await sql<{ n: number }[]>`
+  select count(*)::int as n from appointments
+  where starts_at = ${new Date(startsAt)} and status = 'pending'
+`;
+check('quedan 2 solicitudes para ese horario', compiten[0].n === 2, `${compiten[0].n}`);
+
+const agendaLuis2 = await luis.get('/agenda');
+check('el calendario muestra las 2 solicitudes', /2 solicitudes/.test(agendaLuis2.body));
 
 // Horario fuera de la grilla
 const fueraDeGrilla = new Date(new Date(startsAt).getTime() + 17 * 60000).toISOString();
@@ -299,6 +315,23 @@ check('administración confirma el turno', confirmar.status === 303, `status=${c
 const trasConfirmar = await sql`select status from appointments where id = ${turnoId}`;
 check('en la base queda confirmed', trasConfirmar[0]?.status === 'confirmed', String(trasConfirmar[0]?.status));
 
+// Al confirmar una, la que competía por el mismo horario queda rechazada.
+const desplazada = await sql<{ status: string }[]>`
+  select a.status from appointments a
+  join users u on u.id = a.user_id
+  where a.starts_at = ${new Date(startsAt)} and u.email = ${PACIENTE_B.email}
+`;
+check(
+  'la solicitud que competía queda RECHAZADA automáticamente',
+  desplazada[0]?.status === 'rejected',
+  String(desplazada[0]?.status),
+);
+check(
+  'el aviso informa cuántas se desplazaron',
+  (confirmar.location ?? '').includes('desplazadas=1'),
+  String(confirmar.location),
+);
+
 const agendaAna3 = await ana.get('/agenda');
 check('el calendario de Ana lo muestra como reservado', agendaAna3.body.includes('Reservado'));
 
@@ -318,7 +351,86 @@ check(
 );
 
 // ---------------------------------------------------------------------------
-console.log('\n7. Protección de rutas y sesión');
+console.log('\n7. Administración carga un turno desde el calendario');
+
+const agendaAdmin = await admin.get('/agenda');
+check('el calendario de administración carga', agendaAdmin.status === 200);
+
+// Antes el calendario del admin era de solo lectura: no habia forma de dar de
+// alta un turno que llega por telefono.
+const librosAdmin = [...agendaAdmin.body.matchAll(/\/agenda\/reservar\?inicio=([^"]+)/g)].map(
+  (m) => m[1],
+);
+check(
+  'administración ve horarios clickeables para cargar turnos',
+  librosAdmin.length > 0,
+  `${librosAdmin.length} encontrados`,
+);
+
+if (librosAdmin.length > 0) {
+  const formAdmin = await admin.get(`/agenda/reservar?inicio=${librosAdmin[0]}`);
+  const startAdmin = /name="startsAt"\s+value="([^"]+)"/.exec(formAdmin.body)?.[1];
+  const pacienteOpcion = /<option value="([0-9a-f-]{36})"/.exec(formAdmin.body)?.[1];
+  const servicioAdmin = /<option value="(\d+)"/.exec(formAdmin.body)?.[1];
+
+  check(
+    'el formulario le pide elegir un paciente',
+    formAdmin.body.includes('name="patientId"') && Boolean(pacienteOpcion),
+  );
+  check('y le permite confirmar directamente', formAdmin.body.includes('name="confirmar"'));
+
+  if (startAdmin && pacienteOpcion && servicioAdmin) {
+    const cargado = await admin.post('/agenda/reservar', {
+      startsAt: startAdmin,
+      serviceId: servicioAdmin,
+      patientId: pacienteOpcion,
+      confirmar: 'no',
+      notes: 'Cargado por teléfono.',
+    });
+    check(
+      'administración carga el turno y vuelve a Solicitudes',
+      cargado.status === 303 && (cargado.location ?? '').startsWith('/admin?cargado=1'),
+      `status=${cargado.status} location=${cargado.location}`,
+    );
+
+    const cargadoBd = await sql<{ status: string; notes: string | null }[]>`
+      select status, notes from appointments where starts_at = ${new Date(startAdmin)}
+    `;
+    check(
+      'queda como solicitud pendiente en la base',
+      cargadoBd[0]?.status === 'pending' && cargadoBd[0]?.notes === 'Cargado por teléfono.',
+      `${cargadoBd[0]?.status}`,
+    );
+
+    const panelTrasCarga = await admin.get('/admin');
+    check(
+      'y APARECE en las solicitudes a confirmar',
+      panelTrasCarga.body.includes('Cargado por teléfono.'),
+    );
+
+    // Un paciente no puede cargar turnos para otra persona.
+    const intentoAjeno = await ana.post('/agenda/reservar', {
+      startsAt: startAdmin,
+      serviceId: servicioAdmin,
+      patientId: pacienteOpcion,
+      confirmar: 'si',
+      notes: '',
+    });
+    const deQuien = await sql<{ email: string }[]>`
+      select u.email from appointments a join users u on u.id = a.user_id
+      where a.starts_at = ${new Date(startAdmin)} and a.status = 'pending'
+      order by a.created_at desc limit 1
+    `;
+    check(
+      'AUTORIZACIÓN: un paciente no puede cargar turnos a nombre de otro',
+      intentoAjeno.status !== 500 && deQuien[0]?.email !== undefined,
+      `status=${intentoAjeno.status}`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n8. Protección de rutas y sesión');
 
 const anonimo = new Client('anonimo');
 for (const ruta of ['/agenda', '/mis-turnos', '/admin']) {

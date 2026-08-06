@@ -134,10 +134,11 @@ export function listUpcomingConfirmed() {
 }
 
 /**
- * Comprueba si un horario ya esta tomado por un turno activo.
+ * Comprueba si un horario ya esta CERRADO por un turno confirmado.
  *
- * Es solo para dar un mensaje claro antes de insertar: la garantia real contra
- * reservas duplicadas es el indice unico parcial de la tabla.
+ * Los pendientes no cuentan: son solicitudes y varias pueden competir por el
+ * mismo horario. Es solo para dar un mensaje claro antes de insertar; la
+ * garantia real es el indice unico parcial de la tabla.
  */
 export async function isSlotTaken(startsAt: Date): Promise<boolean> {
   const rows = await db
@@ -146,10 +147,34 @@ export async function isSlotTaken(startsAt: Date): Promise<boolean> {
     .where(
       and(
         eq(appointments.startsAt, startsAt),
-        inArray(appointments.status, ['pending', 'confirmed', 'completed']),
+        inArray(appointments.status, ['confirmed', 'completed']),
       ),
     )
     .limit(1);
 
   return rows.length > 0;
+}
+
+/** Solicitudes pendientes que compiten por un horario. */
+export function listPendingAtSlot(startsAt: Date) {
+  return db
+    .select({
+      id: appointments.id,
+      userId: appointments.userId,
+      patientName: users.fullName,
+      serviceName: services.name,
+    })
+    .from(appointments)
+    .innerJoin(users, eq(appointments.userId, users.id))
+    .innerJoin(services, eq(appointments.serviceId, services.id))
+    .where(and(eq(appointments.startsAt, startsAt), eq(appointments.status, 'pending')));
+}
+
+/** Pacientes registrados, para que administracion cargue un turno en su nombre. */
+export function listPatients() {
+  return db
+    .select({ id: users.id, fullName: users.fullName, email: users.email, phone: users.phone })
+    .from(users)
+    .where(eq(users.role, 'client'))
+    .orderBy(asc(users.fullName));
 }

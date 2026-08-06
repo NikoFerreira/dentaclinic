@@ -20,8 +20,10 @@ export const SLOT_META: Record<
   pending: {
     label: 'Pendiente',
     icon: 'clock',
-    classes: 'border-amber-300 bg-amber-50 text-amber-800',
-    legend: 'Solicitado, esperando confirmación',
+    // Lleva estilos de hover porque sigue siendo solicitable: un pendiente es
+    // una solicitud, no una reserva, y varias pueden competir por el horario.
+    classes: 'border-amber-300 bg-amber-50 text-amber-800 hover:border-amber-500 hover:bg-amber-100',
+    legend: 'Con solicitudes, todavía se puede pedir',
   },
   confirmed: {
     label: 'Reservado',

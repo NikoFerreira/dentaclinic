@@ -101,14 +101,21 @@ export const appointments = pgTable(
     index('appointments_starts_at_idx').on(t.startsAt),
     index('appointments_user_id_idx').on(t.userId),
     /**
-     * Indice unico PARCIAL: impide que dos turnos activos ocupen el mismo
+     * Indice unico PARCIAL: impide que dos turnos CONFIRMADOS ocupen el mismo
      * horario. La garantia vive en la base, no en el codigo, asi que dos
-     * peticiones simultaneas no pueden reservar el mismo hueco.
-     * Los turnos rechazados o cancelados quedan fuera y liberan el horario.
+     * confirmaciones simultaneas no pueden pisarse.
+     *
+     * Los PENDIENTES quedan deliberadamente fuera: son solicitudes, no
+     * reservas. Varios pacientes pueden pedir el mismo horario y
+     * administracion decide; al confirmar uno, el resto se rechaza. Si
+     * pendiente bloqueara, el primero en pedir se quedaria el horario aunque
+     * despues no le sirviera.
+     *
+     * Rechazados y cancelados tampoco cuentan: liberan el horario.
      */
     uniqueIndex('appointments_active_slot_unique')
       .on(t.startsAt)
-      .where(sql`status in ('pending', 'confirmed', 'completed')`),
+      .where(sql`status in ('confirmed', 'completed')`),
   ],
 );
 

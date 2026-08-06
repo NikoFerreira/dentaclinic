@@ -51,6 +51,23 @@ export const bookingSchema = z.object({
     .transform((value) => (value ? value : null)),
 });
 
+/**
+ * Campos extra cuando administracion carga un turno en nombre de un paciente.
+ * `patientId` se valida despues contra la lista real de pacientes: que sea un
+ * UUID no significa que exista ni que sea un cliente.
+ */
+export const adminBookingSchema = bookingSchema.extend({
+  patientId: z
+    .string()
+    .trim()
+    .regex(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      'Elegí un paciente de la lista.',
+    ),
+  /** `si` deja el turno confirmado de una; `no` lo deja como solicitud. */
+  confirmar: z.enum(['si', 'no']).default('no'),
+});
+
 export const appointmentActionSchema = z.object({
   accion: z.enum(['confirmar', 'rechazar', 'cancelar', 'completar']),
   volverA: z.string().optional(),

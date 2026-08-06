@@ -25,10 +25,12 @@ const pending = await listPendingAppointments();
 const confirmed = await listUpcomingConfirmed();
 
 const params = Astro.url.searchParams;
+const desplazadas = Number(params.get('desplazadas') ?? 0);
 const notices = {
   confirmed: params.get('confirmado') === '1',
   updated: params.get('actualizado') === '1',
   cancelled: params.get('cancelado') === '1',
+  loaded: params.get('cargado') === '1',
   invalid: params.get('estado') === 'invalido',
 };
 const currentPath = '/admin';
@@ -38,9 +40,10 @@ const currentPath = '/admin';
   <header class="mb-8 flex flex-wrap items-end justify-between gap-4">
     <div>
       <h1 class="text-3xl font-semibold tracking-tight text-ink-900">Solicitudes de turno</h1>
-      <p class="mt-2 text-[0.975rem] leading-relaxed text-ink-500">
-        Confirmá o rechazá los pedidos de los pacientes. Al rechazar, el horario vuelve a quedar
-        libre.
+      <p class="mt-2 max-w-2xl text-[0.975rem] leading-relaxed text-ink-500">
+        Confirmá o rechazá los pedidos de los pacientes. Varias personas pueden solicitar el mismo
+        horario: al confirmar una, las demás quedan rechazadas automáticamente. Para cargar un turno
+        vos mismo, entrá al calendario y hacé clic en el horario.
       </p>
     </div>
     <a href="/agenda" class={BUTTON_SECONDARY}>
@@ -50,15 +53,25 @@ const currentPath = '/admin';
   </header>
 
   {
-    (notices.confirmed || notices.updated || notices.cancelled) && (
+    (notices.confirmed || notices.updated || notices.cancelled || notices.loaded) && (
       <p class={`mb-6 ${ALERT_OK}`} role="status">
         <Icon name="check" class="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} />
         <span>
-          {notices.confirmed
-            ? 'Turno confirmado.'
-            : notices.cancelled
-              ? 'Turno cancelado; el horario quedó libre.'
-              : 'Turno actualizado.'}
+          {notices.loaded
+            ? 'Turno cargado.'
+            : notices.confirmed
+              ? 'Turno confirmado.'
+              : notices.cancelled
+                ? 'Turno cancelado; el horario quedó libre.'
+                : 'Turno actualizado.'}
+          {desplazadas > 0 && (
+            <>
+              {' '}
+              Se {desplazadas === 1 ? 'rechazó' : 'rechazaron'} {desplazadas}{' '}
+              {desplazadas === 1 ? 'solicitud' : 'solicitudes'} que competían por ese horario;
+              conviene avisar a {desplazadas === 1 ? 'esa persona' : 'esas personas'}.
+            </>
+          )}
         </span>
       </p>
     )
